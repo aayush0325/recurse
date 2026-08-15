@@ -70,12 +70,37 @@ struct OrModel {
     context_length: Option<u64>,
     #[serde(default)]
     pricing: Option<OrPricing>,
+    #[serde(default)]
+    architecture: Option<OrArchitecture>,
+}
+
+#[derive(Deserialize, Default)]
+struct OrArchitecture {
+    #[serde(default)]
+    input_modalities: Vec<String>,
+    #[serde(default)]
+    output_modalities: Vec<String>,
 }
 
 #[derive(Deserialize, Default)]
 struct OrPricing {
     #[serde(default)]
     prompt: String,
+}
+
+/// Text-only models: accept text on input (may also accept other modalities)
+/// but produce text-only output. This drops image/video/audio output models
+/// (VLMs, TTS, etc.).
+fn is_text_model(m: &OrModel) -> bool {
+    match m.architecture.as_ref() {
+        Some(a) => {
+            let input_has_text = a.input_modalities.iter().any(|x| x == "text");
+            let output_text_only =
+                a.output_modalities.len() == 1 && a.output_modalities[0] == "text";
+            input_has_text && output_text_only
+        }
+        None => true,
+    }
 }
 
 /// Fetch the full OpenRouter model catalog (public, unauthenticated).
@@ -89,6 +114,7 @@ pub fn fetch_models() -> Result<Vec<ModelInfo>, String> {
     let models = resp
         .data
         .into_iter()
+        .filter(is_text_model)
         .map(|m| {
             let prompt_price = m
                 .pricing

@@ -40,6 +40,7 @@ pub fn run() {
             commands::xrefs_to,
             commands::decompile,
             commands::raw,
+            commands::set_zoom,
             commands::agent_chat,
             commands::agent_reset,
             commands::llm_status,

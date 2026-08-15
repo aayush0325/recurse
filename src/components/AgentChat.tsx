@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
-import { Eye, EyeOff, RotateCw, Send, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { ArrowUpDown, Eye, EyeOff, RotateCw, Send, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,9 +12,28 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { api } from "@/api";
 import { useLlmStore } from "@/store/llmStore";
+import type { ModelInfo } from "@/types";
+
+type SortMode = "default" | "price-asc" | "price-desc";
+
+function priceOf(m: ModelInfo): number {
+	const p = parseFloat(m.prompt_price);
+	return Number.isFinite(p) ? p : 0;
+}
+
+function fmtPrice(m: ModelInfo): string {
+	return `$${(priceOf(m) * 1_000_000).toFixed(2)}/M`;
+}
 
 interface Message {
 	role: "user" | "assistant";
@@ -168,12 +187,22 @@ function ModelSelector() {
 	const [key, setKey] = useState("");
 	const [show, setShow] = useState(false);
 	const [saving, setSaving] = useState(false);
+	const [sort, setSort] = useState<SortMode>("default");
 
-	const filtered = models.filter(
-		(m) =>
-			m.id.toLowerCase().includes(query.toLowerCase()) ||
-			m.name.toLowerCase().includes(query.toLowerCase()),
-	);
+	const filtered = useMemo(() => {
+		const list = models.filter(
+			(m) =>
+				m.id.toLowerCase().includes(query.toLowerCase()) ||
+				m.name.toLowerCase().includes(query.toLowerCase()),
+		);
+		if (sort === "price-asc") {
+			return [...list].sort((a, b) => priceOf(a) - priceOf(b));
+		}
+		if (sort === "price-desc") {
+			return [...list].sort((a, b) => priceOf(b) - priceOf(a));
+		}
+		return list;
+	}, [models, query, sort]);
 
 	const onSaveKey = async () => {
 		setSaving(true);
@@ -251,6 +280,35 @@ function ModelSelector() {
 							autoFocus
 							className="min-w-0 flex-1"
 						/>
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button
+									variant="outline"
+									size="sm"
+									title="Sort models"
+								>
+									<ArrowUpDown />
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end">
+								<DropdownMenuLabel>Sort by price</DropdownMenuLabel>
+								<DropdownMenuItem
+									onClick={() => setSort("price-asc")}
+								>
+									Low → High
+								</DropdownMenuItem>
+								<DropdownMenuItem
+									onClick={() => setSort("price-desc")}
+								>
+									High → Low
+								</DropdownMenuItem>
+								<DropdownMenuItem
+									onClick={() => setSort("default")}
+								>
+									Default
+								</DropdownMenuItem>
+							</DropdownMenuContent>
+						</DropdownMenu>
 						<Button
 							variant="outline"
 							size="icon"
@@ -296,6 +354,14 @@ function ModelSelector() {
 												className="px-1.5 py-0 text-[9px]"
 											>
 												free
+											</Badge>
+										)}
+										{!m.free && priceOf(m) > 0 && (
+											<Badge
+												variant="outline"
+												className="px-1.5 py-0 text-[9px]"
+											>
+												{fmtPrice(m)}
 											</Badge>
 										)}
 										{m.context_length > 0 && (

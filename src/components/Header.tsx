@@ -1,10 +1,19 @@
-import { MessageSquare, X } from "lucide-react";
+import { MessageSquare, Settings, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { pickBinary } from "@/api";
 import { useBinaryStore } from "@/store/binaryStore";
 import { useUiStore } from "@/store/uiStore";
+import { useSettingsStore } from "@/store/settingsStore";
 
 export function Header() {
 	const binary = useBinaryStore((s) => s.binary);
@@ -13,9 +22,14 @@ export function Header() {
 	const closeBinary = useBinaryStore((s) => s.closeBinary);
 	const chatOpen = useUiStore((s) => s.chatOpen);
 	const toggleChat = useUiStore((s) => s.toggleChat);
+	const zoomLevel = useSettingsStore((s) => s.zoomLevel);
+	const zoomIn = useSettingsStore((s) => s.zoomIn);
+	const zoomOut = useSettingsStore((s) => s.zoomOut);
+	const resetZoom = useSettingsStore((s) => s.resetZoom);
 
 	const bin = binary?.info?.bin;
 	const file = binary?.path.split(/[\\/]/).pop();
+	const zoomPct = Math.round(Math.pow(1.2, zoomLevel) * 100);
 
 	const onOpen = async () => {
 		const path = await pickBinary();
@@ -75,6 +89,32 @@ export function Header() {
 				<Button size="sm" onClick={onOpen} disabled={busy}>
 					{busy ? "Analyzing…" : "Open Binary"}
 				</Button>
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							variant="ghost"
+							size="icon"
+							title="Settings"
+						>
+							<Settings />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end">
+						<DropdownMenuLabel>
+							Zoom · {zoomPct}%
+						</DropdownMenuLabel>
+						<DropdownMenuItem onClick={zoomIn}>
+							Zoom in (Ctrl +)
+						</DropdownMenuItem>
+						<DropdownMenuItem onClick={zoomOut}>
+							Zoom out (Ctrl −)
+						</DropdownMenuItem>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem onClick={resetZoom}>
+							Reset zoom (Ctrl 0)
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
 			</div>
 		</header>
 	);

@@ -35,6 +35,7 @@ export const api = {
 	xrefsTo: (addr: number) => invoke<Xref[]>("xrefs_to", { addr }),
 	decompile: (addr: number) => invoke<unknown>("decompile", { addr }),
 	raw: (cmd: string) => invoke<unknown>("raw", { cmd }),
+	setZoom: (scale: number) => invoke<void>("set_zoom", { scale }),
 	agentChat: (message: string) => invoke<string>("agent_chat", { message }),
 	agentReset: () => invoke<void>("agent_reset"),
 	llmStatus: () => invoke<LlmStatus>("llm_status"),

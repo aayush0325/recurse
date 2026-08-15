@@ -9,6 +9,7 @@ import { Header } from "@/components/Header";
 import { pickBinary } from "@/api";
 import { useBinaryStore } from "@/store/binaryStore";
 import { useLlmStore } from "@/store/llmStore";
+import { useSettingsStore } from "@/store/settingsStore";
 import { useUiStore } from "@/store/uiStore";
 
 function App() {
@@ -23,6 +24,26 @@ function App() {
 
 	useEffect(() => {
 		useLlmStore.getState().init();
+		useSettingsStore.getState().initZoom();
+	}, []);
+
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (!(e.ctrlKey || e.metaKey)) return;
+			const k = e.key.toLowerCase();
+			if (k === "=" || k === "+") {
+				e.preventDefault();
+				useSettingsStore.getState().zoomIn();
+			} else if (k === "-") {
+				e.preventDefault();
+				useSettingsStore.getState().zoomOut();
+			} else if (k === "0") {
+				e.preventDefault();
+				useSettingsStore.getState().resetZoom();
+			}
+		};
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
 	}, []);
 
 	useEffect(() => {

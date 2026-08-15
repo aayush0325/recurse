@@ -127,6 +127,14 @@ pub fn raw(cmd: String, state: State<'_, AppState>) -> Result<Value, String> {
     engine::raw(with_sess(&guard)?, &cmd)
 }
 
+/// Zoom the whole window (native webview zoom, like VS Code's Ctrl +/-).
+#[tauri::command]
+pub fn set_zoom(scale: f64, window: tauri::WebviewWindow) -> Result<(), String> {
+    window
+        .set_zoom(scale)
+        .map_err(|e| format!("set_zoom failed: {e}"))
+}
+
 #[tauri::command]
 pub fn agent_chat(message: String, state: State<'_, AppState>) -> Result<String, String> {
     // Capture binary context, then drop the session lock so the (potentially
