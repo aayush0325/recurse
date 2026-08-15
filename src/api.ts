@@ -22,6 +22,7 @@ export async function pickBinary(): Promise<string | null> {
 
 export const api = {
 	openBinary: (path: string) => invoke<BinaryInfo>("open_binary", { path }),
+	analyze: () => invoke<void>("analyze"),
 	closeBinary: () => invoke<void>("close_binary"),
 	functions: () => invoke<Function[]>("functions"),
 	functionAt: (addr: number) => invoke<Function>("function_at", { addr }),

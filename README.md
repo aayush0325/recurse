@@ -46,6 +46,8 @@ cd radare2
 r2 -v
 ```
 
+> **Compatibility:** Recurse targets **radare2 6.x** (tested on **6.2.1**).
+
 For a quick non-recommended option, distro packages also exist:
 
 ```bash

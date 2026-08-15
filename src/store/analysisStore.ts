@@ -59,7 +59,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 			decompiled: null,
 			decompileError: null,
 		});
-		api.functionDisasm(fn.offset)
+		api.functionDisasm(fn.addr)
 			.then((asm) => set({ asm }))
 			.catch((e) => {
 				set({ asm: null });
@@ -73,7 +73,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 		if (!sel) return;
 		set({ asmLoading: true });
 		try {
-			set({ asm: await api.functionDisasm(sel.offset) });
+			set({ asm: await api.functionDisasm(sel.addr) });
 		} catch (e) {
 			setErr(String(e));
 		} finally {
@@ -86,7 +86,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 		if (!sel) return;
 		set({ decompiling: true, decompiled: null, decompileError: null });
 		try {
-			const out = await api.decompile(sel.offset);
+			const out = await api.decompile(sel.addr);
 			set({
 				decompiled:
 					typeof out === "string"

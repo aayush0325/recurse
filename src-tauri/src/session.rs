@@ -28,7 +28,8 @@ pub struct R2Session {
 }
 
 impl R2Session {
-    /// Spawn r2, load the binary, parse metadata and run a full analysis pass.
+    /// Spawn r2 and load the binary. Analysis is deferred to
+    /// [`R2Session::analyze`] so opening never blocks the UI on a long pass.
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, String> {
         let path = path.into();
         let worker_path = path.to_string_lossy().to_string();
@@ -50,12 +51,15 @@ impl R2Session {
             info: Value::Null,
         };
 
-        let info = sess.run("ij")?;
-        // Analysis pass: functions, refs, xrefs, strings. Long-running on big
-        // binaries, but gives the agent a fully analyzed target up front.
-        let _ = sess.run("aaa");
-        sess.info = info;
+        sess.info = sess.run("ij")?;
         Ok(sess)
+    }
+
+    /// Full analysis pass: functions, refs, xrefs, strings. Long-running on big
+    /// binaries, but gives the agent a fully analyzed target. Run it explicitly
+    /// (or via `raw`) so the UI can show the workspace in the meantime.
+    pub fn analyze(&self) -> Result<Value, String> {
+        self.run("aaa")
     }
 
     /// Run an r2 command. JSON output is preferred; plain-text output is
@@ -92,7 +96,7 @@ impl Drop for R2Session {
 fn worker(path: &str, rx: Receiver<Cmd>, start_tx: Sender<StartupResult>) {
     let opts = r2pipe::R2PipeSpawnOptions {
         exepath: "r2".into(),
-        args: vec![],
+        args: vec!["-e", "bin.cache=true"],
     };
     let mut r2p = match R2Pipe::spawn(path, Some(opts)) {
         Ok(p) => p,
@@ -106,9 +110,16 @@ fn worker(path: &str, rx: Receiver<Cmd>, start_tx: Sender<StartupResult>) {
     loop {
         match rx.recv() {
             Ok(Cmd::Run { cmd, resp }) => {
+                // Run the command exactly once. `cmdj` would internally `cmd`
+                // (consuming stdout) and then fail JSON parse, so a naive
+                // `cmdj().or_else(cmd())` re-sends the command and runs it a
+                // second time — doubling cost for non-JSON commands like `aaa`.
                 let result: Result<Value, String> = r2p
-                    .cmdj(&cmd)
-                    .or_else(|_| r2p.cmd(&cmd).map(Value::String))
+                    .cmd(&cmd)
+                    .map(|text| {
+                        serde_json::from_str::<Value>(&text)
+                            .unwrap_or_else(|_| Value::String(text))
+                    })
                     .map_err(|e| e.to_string());
                 let _ = resp.send(result);
             }

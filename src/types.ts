@@ -14,7 +14,7 @@ export interface BinaryInfo {
 }
 
 export interface Function {
-	offset: number;
+	addr: number;
 	name?: string;
 	realname?: string;
 	size?: number;
@@ -23,7 +23,7 @@ export interface Function {
 }
 
 export interface AsmInsn {
-	offset: number;
+	addr: number;
 	text?: string;
 	disasm?: string;
 	bytes?: string | null;
@@ -42,7 +42,7 @@ export interface AsmResult {
 }
 
 export interface R2String {
-	offset: number;
+	vaddr: number;
 	string: string;
 	type?: string;
 	[k: string]: unknown;

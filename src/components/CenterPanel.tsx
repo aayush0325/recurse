@@ -14,7 +14,7 @@ function OpRow({
 	op,
 }: {
 	op: {
-		offset: number;
+		addr: number;
 		bytes?: string | null;
 		text?: string;
 		disasm?: string;
@@ -26,7 +26,7 @@ function OpRow({
 	return (
 		<div className="hover:bg-accent flex gap-3 px-3 py-px whitespace-nowrap">
 			<span className="text-primary w-[9ch] shrink-0">
-				{fmtAddr(op.offset)}
+				{fmtAddr(op.addr)}
 			</span>
 			<span className="text-muted-foreground w-[16ch] shrink-0 overflow-hidden">
 				{op.bytes ?? ""}
@@ -112,7 +112,7 @@ export function CenterPanel() {
 										"unknown"}
 								</span>
 								<span className="text-muted-foreground font-mono text-[11px]">
-									{fmtAddr(selected.offset)} ·{" "}
+									{fmtAddr(selected.addr)} ·{" "}
 									{asm?.size ?? selected.size ?? "?"} bytes
 								</span>
 							</div>
@@ -136,7 +136,7 @@ export function CenterPanel() {
 									</div>
 								)}
 							{asm?.ops?.map((op) => (
-								<OpRow key={op.offset} op={op} />
+								<OpRow key={op.addr} op={op} />
 							))}
 						</div>
 						{decompiled && (
@@ -169,11 +169,11 @@ export function CenterPanel() {
 						<tbody>
 							{strings.map((s) => (
 								<tr
-									key={`${s.offset}-${s.string}`}
+									key={`${s.vaddr}-${s.string}`}
 									className="hover:bg-accent"
 								>
 									<td className="text-primary px-3 py-px">
-										{fmtAddr(s.offset)}
+										{fmtAddr(s.vaddr)}
 									</td>
 									<td className="px-3 py-px">
 										{s.type ?? ""}

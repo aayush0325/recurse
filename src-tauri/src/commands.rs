@@ -25,11 +25,25 @@ fn with_sess<'a>(
 
 #[tauri::command]
 pub fn open_binary(path: String, state: State<'_, AppState>) -> Result<Value, String> {
+    eprintln!("[recurse] open_binary: {path}");
     let mut guard = session(&state)?;
     let sess = R2Session::open(path)?;
     let summary = engine::summary(&sess);
+    eprintln!(
+        "[recurse] open_binary: funcs={} strings={}",
+        summary["function_count"], summary["string_count"]
+    );
     *guard = Some(sess);
     Ok(summary)
+}
+
+#[tauri::command]
+pub fn analyze(state: State<'_, AppState>) -> Result<(), String> {
+    eprintln!("[recurse] analyze: starting `aaa`");
+    let guard = session(&state)?;
+    with_sess(&guard)?.analyze()?;
+    eprintln!("[recurse] analyze: done");
+    Ok(())
 }
 
 #[tauri::command]
@@ -47,7 +61,12 @@ pub fn binary_info(state: State<'_, AppState>) -> Result<Value, String> {
 #[tauri::command]
 pub fn functions(state: State<'_, AppState>) -> Result<Value, String> {
     let guard = session(&state)?;
-    engine::functions(with_sess(&guard)?)
+    let v = engine::functions(with_sess(&guard)?)?;
+    eprintln!(
+        "[recurse] functions: {}",
+        v.as_array().map(|a| a.len()).unwrap_or(0)
+    );
+    Ok(v)
 }
 
 #[tauri::command]
@@ -71,13 +90,23 @@ pub fn function_disasm(addr: u64, state: State<'_, AppState>) -> Result<Value, S
 #[tauri::command]
 pub fn strings(state: State<'_, AppState>) -> Result<Value, String> {
     let guard = session(&state)?;
-    engine::strings(with_sess(&guard)?)
+    let v = engine::strings(with_sess(&guard)?)?;
+    eprintln!(
+        "[recurse] strings: {}",
+        v.as_array().map(|a| a.len()).unwrap_or(0)
+    );
+    Ok(v)
 }
 
 #[tauri::command]
 pub fn imports(state: State<'_, AppState>) -> Result<Value, String> {
     let guard = session(&state)?;
-    engine::imports(with_sess(&guard)?)
+    let v = engine::imports(with_sess(&guard)?)?;
+    eprintln!(
+        "[recurse] imports: {}",
+        v.as_array().map(|a| a.len()).unwrap_or(0)
+    );
+    Ok(v)
 }
 
 #[tauri::command]

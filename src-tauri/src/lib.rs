@@ -28,6 +28,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::open_binary,
+            commands::analyze,
             commands::close_binary,
             commands::binary_info,
             commands::functions,

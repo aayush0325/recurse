@@ -22,6 +22,7 @@ export const useBinaryStore = create<BinaryState>((set) => ({
 		try {
 			const info = await api.openBinary(path);
 			set({ binary: info });
+			await api.analyze();
 			const [f, s, i] = await Promise.all([
 				api.functions(),
 				api.strings(),
