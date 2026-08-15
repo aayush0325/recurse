@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import { api } from "../api";
 import type { BinaryInfo } from "../types";
+import { useAgentStore } from "./agentStore";
 import { useAnalysisStore } from "./analysisStore";
 import { useUiStore } from "./uiStore";
 
@@ -33,6 +34,7 @@ export const useBinaryStore = create<BinaryState>((set) => ({
 				strings: s ?? [],
 				imports: i ?? [],
 			});
+			await useAgentStore.getState().reload();
 		} catch (e) {
 			useUiStore.getState().setErr(`failed to open binary: ${e}`);
 			set({ binary: null });

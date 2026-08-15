@@ -2,11 +2,14 @@ use serde::Serialize;
 use serde_json::Value;
 use tauri::State;
 
-use crate::agent::{self, ModelInfo};
+use crate::agent::{self, AgentEvent, ModelInfo, ToolCall};
 use crate::config;
+use crate::debugger;
 use crate::engine;
+use crate::memory;
 use crate::project::{self, Project};
 use crate::session::R2Session;
+use crate::tools::ToolContext;
 use crate::AppState;
 
 fn session<'a>(
@@ -24,6 +27,21 @@ fn with_sess<'a>(
     guard.as_ref().ok_or_else(|| "no binary loaded".into())
 }
 
+fn current_project(state: &State<'_, AppState>) -> Result<Option<String>, String> {
+    Ok(state
+        .project
+        .lock()
+        .map_err(|e| format!("project lock poisoned: {e}"))?
+        .as_ref()
+        .map(|p| p.name.clone()))
+}
+
+fn persist_history(project: Option<&str>, messages: &[agent::ChatMessage]) {
+    if let Ok(json) = serde_json::to_string(messages) {
+        let _ = memory::save_history(project, &json);
+    }
+}
+
 #[tauri::command]
 pub fn open_binary(path: String, state: State<'_, AppState>) -> Result<Value, String> {
     eprintln!("[recurse] open_binary: {path}");
@@ -35,6 +53,7 @@ pub fn open_binary(path: String, state: State<'_, AppState>) -> Result<Value, St
         summary["function_count"], summary["string_count"]
     );
     *guard = Some(sess);
+    restore_agent(&state)?;
     Ok(summary)
 }
 
@@ -49,6 +68,13 @@ pub fn analyze(state: State<'_, AppState>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn close_binary(state: State<'_, AppState>) -> Result<(), String> {
+    {
+        let mut debug = state
+            .debug
+            .lock()
+            .map_err(|e| format!("debug lock poisoned: {e}"))?;
+        debug.take();
+    }
     session(&state)?.take();
     *state
         .project
@@ -140,13 +166,23 @@ pub fn set_zoom(scale: f64, window: tauri::WebviewWindow) -> Result<(), String> 
         .map_err(|e| format!("set_zoom failed: {e}"))
 }
 
+/// Start an agent turn. Returns immediately with a run id; progress streams
+/// over the `agent-event` channel. The worker thread owns the LLM streaming
+/// and tool loop so the UI (and r2 commands) never block.
 #[tauri::command]
-pub fn agent_chat(message: String, state: State<'_, AppState>) -> Result<String, String> {
-    // Capture binary context, then drop the session lock so the (potentially
-    // slow) LLM call never blocks r2 commands.
-    let context = {
-        let guard = session(&state)?;
-        let sess = with_sess(&guard)?;
+pub async fn agent_chat(
+    message: String,
+    on_event: tauri::ipc::Channel<AgentEvent>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let (path, info) = {
+        let guard = state
+            .session
+            .lock()
+            .map_err(|e| format!("session lock poisoned: {e}"))?;
+        let sess = guard
+            .as_ref()
+            .ok_or_else(|| "no binary loaded".to_string())?;
         (sess.path.to_string_lossy().to_string(), engine::info(sess))
     };
     let config = state
@@ -154,11 +190,71 @@ pub fn agent_chat(message: String, state: State<'_, AppState>) -> Result<String,
         .lock()
         .map_err(|e| format!("llm lock poisoned: {e}"))?
         .clone();
-    let mut agent = state
-        .agent
-        .lock()
-        .map_err(|e| format!("agent lock poisoned: {e}"))?;
-    agent.chat(&config, &context.0, &context.1, &message)
+    let agent = state.agent.clone();
+    let session = state.session.clone();
+    let debug = state.debug.clone();
+    let project = current_project(&state)?;
+    let project_for_history = project.clone();
+
+    // The blocking agent loop (LLM streaming + r2 tool calls) runs on the
+    // Tauri blocking pool so it never blocks the IPC / main thread. Tokens
+    // stream back over the per-request channel.
+    tauri::async_runtime::spawn_blocking(move || {
+        let tools = crate::tools::schema();
+        let memory = memory::summary(project.as_deref());
+        let ctx = ToolContext {
+            session,
+            debug,
+            project,
+        };
+
+        // Wrapped so any panic still surfaces an Error event to the frontend
+        // (the chat would otherwise hang on the pending indicator forever).
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
+            || -> Result<Vec<agent::ChatMessage>, String> {
+                let mut guard = agent
+                    .lock()
+                    .map_err(|_| "agent lock poisoned".to_string())?;
+                let mut exec = |tc: &ToolCall| crate::tools::execute(tc, &ctx);
+                let mut emit = |ev: AgentEvent| {
+                    let _ = on_event.send(ev);
+                };
+                guard
+                    .run(
+                        "run",
+                        &config,
+                        &path,
+                        &info,
+                        &memory,
+                        &message,
+                        &tools,
+                        &mut exec,
+                        &mut emit,
+                    )
+                    .map(|_| guard.messages().to_vec())
+            }),
+        );
+
+        match outcome {
+            Ok(Ok(messages)) => {
+                persist_history(project_for_history.as_deref(), &messages);
+            }
+            Ok(Err(e)) => {
+                let _ = on_event.send(AgentEvent::Error {
+                    run_id: "run".into(),
+                    message: e,
+                });
+            }
+            Err(_) => {
+                let _ = on_event.send(AgentEvent::Error {
+                    run_id: "run".into(),
+                    message: "agent worker panicked".into(),
+                });
+            }
+        }
+    });
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -168,7 +264,102 @@ pub fn agent_reset(state: State<'_, AppState>) -> Result<(), String> {
         .lock()
         .map_err(|e| format!("agent lock poisoned: {e}"))?;
     agent.reset();
+    let project = current_project(&state)?;
+    memory::clear_history(project.as_deref());
     Ok(())
+}
+
+/// Load persisted conversation history into the agent (called on binary open)
+/// and return the restored messages.
+#[tauri::command]
+pub fn agent_history(state: State<'_, AppState>) -> Result<Vec<agent::ChatMessage>, String> {
+    restore_agent(&state)
+}
+
+fn restore_agent(state: &State<'_, AppState>) -> Result<Vec<agent::ChatMessage>, String> {
+    let project = current_project(state)?;
+    let mut agent = state
+        .agent
+        .lock()
+        .map_err(|e| format!("agent lock poisoned: {e}"))?;
+    if let Some(json) = memory::load_history(project.as_deref()) {
+        if let Ok(msgs) = serde_json::from_str::<Vec<agent::ChatMessage>>(&json) {
+            agent.load(msgs);
+        }
+    }
+    Ok(agent.messages().to_vec())
+}
+
+/// Start a debug session for the currently loaded binary (`r2 -d`).
+#[tauri::command]
+pub fn debug_start(state: State<'_, AppState>) -> Result<(), String> {
+    let path = {
+        let guard = session(&state)?;
+        with_sess(&guard)?.path.clone()
+    };
+    let mut debug = state
+        .debug
+        .lock()
+        .map_err(|e| format!("debug lock poisoned: {e}"))?;
+    if debug.is_none() {
+        let sess = R2Session::open_with_args(path, debugger::SPAWN_ARGS.to_vec())?;
+        *debug = Some(sess);
+    }
+    Ok(())
+}
+
+/// Pass a raw r2 debugger command through to the debug session.
+#[tauri::command]
+pub fn debug_command(cmd: String, state: State<'_, AppState>) -> Result<Value, String> {
+    let debug = state
+        .debug
+        .lock()
+        .map_err(|e| format!("debug lock poisoned: {e}"))?;
+    let sess = debug.as_ref().ok_or_else(|| "debugger not started".to_string())?;
+    sess.run(&cmd)
+}
+
+#[tauri::command]
+pub fn debug_stop(state: State<'_, AppState>) -> Result<(), String> {
+    let mut debug = state
+        .debug
+        .lock()
+        .map_err(|e| format!("debug lock poisoned: {e}"))?;
+    if let Some(sess) = debug.as_ref() {
+        let _ = debugger::kill(sess);
+    }
+    debug.take();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn debug_registers(state: State<'_, AppState>) -> Result<Value, String> {
+    let debug = state
+        .debug
+        .lock()
+        .map_err(|e| format!("debug lock poisoned: {e}"))?;
+    let sess = debug.as_ref().ok_or_else(|| "debugger not started".to_string())?;
+    debugger::registers(sess)
+}
+
+#[tauri::command]
+pub fn debug_disassemble(count: u64, state: State<'_, AppState>) -> Result<Value, String> {
+    let debug = state
+        .debug
+        .lock()
+        .map_err(|e| format!("debug lock poisoned: {e}"))?;
+    let sess = debug.as_ref().ok_or_else(|| "debugger not started".to_string())?;
+    debugger::current_disasm(sess, count)
+}
+
+#[tauri::command]
+pub fn debug_breakpoints(state: State<'_, AppState>) -> Result<Value, String> {
+    let debug = state
+        .debug
+        .lock()
+        .map_err(|e| format!("debug lock poisoned: {e}"))?;
+    let sess = debug.as_ref().ok_or_else(|| "debugger not started".to_string())?;
+    debugger::breakpoints(sess)
 }
 
 #[derive(Serialize)]
@@ -261,6 +452,7 @@ pub fn create_project(
         .project
         .lock()
         .map_err(|e| format!("project lock poisoned: {e}"))? = Some(p.clone());
+    restore_agent(&state)?;
     Ok(p)
 }
 
@@ -272,6 +464,7 @@ pub fn open_project(name: String, state: State<'_, AppState>) -> Result<Project,
         .project
         .lock()
         .map_err(|e| format!("project lock poisoned: {e}"))? = Some(p.clone());
+    restore_agent(&state)?;
     Ok(p)
 }
 

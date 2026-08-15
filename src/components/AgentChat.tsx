@@ -1,5 +1,22 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { ArrowUpDown, Eye, EyeOff, RotateCw, Send, Trash2 } from "lucide-react";
+import {
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type RefObject,
+} from "react";
+import {
+	ArrowUpDown,
+	ChevronDown,
+	ChevronRight,
+	Eye,
+	EyeOff,
+	RotateCw,
+	Send,
+	Trash2,
+	Wrench,
+	X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,8 +37,10 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { api } from "@/api";
+import { Markdown } from "@/components/Markdown";
 import { useLlmStore } from "@/store/llmStore";
+import { useAgentStore, type ToolCallUi, type UiBlock } from "@/store/agentStore";
+import { useContextStore } from "@/store/contextStore";
 import type { ModelInfo } from "@/types";
 
 type SortMode = "default" | "price-asc" | "price-desc";
@@ -35,20 +54,57 @@ function fmtPrice(m: ModelInfo): string {
 	return `$${(priceOf(m) * 1_000_000).toFixed(2)}/M`;
 }
 
-interface Message {
-	role: "user" | "assistant";
-	content: string;
-}
-
 interface Props {
 	inputRef?: RefObject<HTMLTextAreaElement | null>;
 }
 
+function ToolCallChip({ call }: { call: ToolCallUi }) {
+	const [open, setOpen] = useState(false);
+	const running = call.result === undefined;
+	return (
+		<div className="border-border text-muted-foreground rounded border px-2 py-1 text-[11px]">
+			<button
+				className="flex w-full min-w-0 items-center gap-1.5 text-left"
+				onClick={() => setOpen((o) => !o)}
+			>
+				<Wrench className="h-3 w-3 shrink-0" />
+				<span className="shrink-0 font-mono font-semibold">
+					{call.name}
+				</span>
+				{call.arguments && (
+					<span className="text-muted-foreground/70 min-w-0 flex-1 truncate font-mono">
+						{call.arguments.slice(0, 40)}
+					</span>
+				)}
+				<span className="shrink-0">
+					{running ? (
+						<span className="text-primary animate-pulse">…</span>
+					) : open ? (
+						<ChevronDown className="h-3 w-3" />
+					) : (
+						<ChevronRight className="h-3 w-3" />
+					)}
+				</span>
+			</button>
+			{open && call.result !== undefined && (
+				<pre className="text-muted-foreground mt-1 max-h-40 overflow-auto border-t pt-1 font-mono text-[10px] break-words whitespace-pre-wrap">
+					{call.result}
+				</pre>
+			)}
+		</div>
+	);
+}
+
 export function AgentChat({ inputRef }: Props) {
-	const [messages, setMessages] = useState<Message[]>([]);
+	const messages = useAgentStore((s) => s.messages);
+	const busy = useAgentStore((s) => s.busy);
+	const send = useAgentStore((s) => s.send);
+	const reset = useAgentStore((s) => s.reset);
+
+	const items = useContextStore((s) => s.items);
+	const removeItem = useContextStore((s) => s.remove);
+
 	const [input, setInput] = useState("");
-	const [busy, setBusy] = useState(false);
-	const [err, setErr] = useState<string | null>(null);
 	const scrollRef = useRef<HTMLDivElement>(null);
 
 	const provider = useLlmStore((s) => s.provider);
@@ -58,26 +114,12 @@ export function AgentChat({ inputRef }: Props) {
 		scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
 	}, [messages, busy]);
 
-	const send = async () => {
+	const doSend = async () => {
 		const text = input.trim();
 		if (!text || busy) return;
 		setInput("");
-		setErr(null);
-		setMessages((m) => [...m, { role: "user", content: text }]);
-		setBusy(true);
-		try {
-			const reply = await api.agentChat(text);
-			setMessages((m) => [...m, { role: "assistant", content: reply }]);
-		} catch (e) {
-			setErr(String(e));
-		} finally {
-			setBusy(false);
-		}
-	};
-
-	const reset = async () => {
-		await api.agentReset();
-		setMessages([]);
+		const ctxs = useContextStore.getState().items;
+		await send(text, ctxs);
 	};
 
 	return (
@@ -111,7 +153,7 @@ export function AgentChat({ inputRef }: Props) {
 
 			<div
 				ref={scrollRef}
-				className="flex flex-1 flex-col gap-2 overflow-y-auto p-3"
+				className="scroll-host flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-3"
 			>
 				{messages.length === 0 && !busy && (
 					<div className="text-muted-foreground px-1 py-3 text-center text-xs">
@@ -119,32 +161,62 @@ export function AgentChat({ inputRef }: Props) {
 						analysis session and can run commands on your behalf.
 					</div>
 				)}
-				{messages.map((m, i) => (
-					<div
-						key={i}
-						className={cn(
-							"max-w-[92%] rounded-lg px-2.5 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap",
-							m.role === "user"
-								? "bg-primary text-primary-foreground self-end"
-								: "border-border bg-background self-start border",
+				{messages.map((m) => (
+					<div key={m.id}>
+						{m.role === "user" ? (
+							<div className="flex justify-end">
+								<div className="bg-primary text-primary-foreground max-w-[92%] rounded-lg px-2.5 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap">
+									{m.blocks
+										.filter((b) => b.kind === "content")
+										.map((b) => (b.kind === "content" ? b.text : ""))
+										.join("")}
+									{m.contextRefs && m.contextRefs.length > 0 && (
+										<div className="mt-1.5 flex flex-wrap gap-1">
+											{m.contextRefs.map((ref, i) => (
+												<span
+													key={i}
+													className="bg-primary-foreground/15 rounded px-1 py-px font-mono text-[10px]"
+												>
+													{ref}
+												</span>
+											))}
+										</div>
+									)}
+								</div>
+							</div>
+						) : (
+							<AssistantMessage
+								blocks={m.blocks}
+								pending={m.pending}
+								error={m.error}
+							/>
 						)}
-					>
-						{m.content.split("\n").map((line, j) => (
-							<div key={j}>{line || "\u00A0"}</div>
-						))}
 					</div>
 				))}
-				{busy && (
-					<div className="border-border bg-background text-muted-foreground self-start rounded-lg border px-2.5 py-2 text-xs">
-						thinking…
-					</div>
-				)}
-				{err && (
-					<div className="border-destructive bg-destructive/10 text-destructive rounded-md border p-2 text-[11px]">
-						{err}
-					</div>
-				)}
 			</div>
+
+			{items.length > 0 && (
+				<div className="border-border flex flex-wrap gap-1 border-t px-2 pt-1.5">
+					{items.map((it) => (
+						<Badge
+							key={it.id}
+							variant="secondary"
+							className="font-mono text-[10px]"
+						>
+							<span className="max-w-[180px] truncate">
+								{it.label}
+							</span>
+							<button
+								className="ml-1 hover:text-destructive"
+								onClick={() => removeItem(it.id)}
+								title="Remove from context"
+							>
+								<X className="h-3 w-3" />
+							</button>
+						</Badge>
+					))}
+				</div>
+			)}
 
 			<div className="border-border flex items-end gap-2 border-t p-2.5">
 				<Textarea
@@ -156,19 +228,85 @@ export function AgentChat({ inputRef }: Props) {
 					onKeyDown={(e) => {
 						if (e.key === "Enter" && !e.shiftKey) {
 							e.preventDefault();
-							send();
+							doSend();
 						}
 					}}
 				/>
 				<Button
 					size="icon"
-					onClick={send}
+					onClick={doSend}
 					disabled={busy || !input.trim()}
 					title="Send"
 				>
 					<Send />
 				</Button>
 			</div>
+		</div>
+	);
+}
+
+function ReasoningBlock({ text }: { text: string }) {
+	const [show, setShow] = useState(true);
+	return (
+		<div className="text-muted-foreground mb-1.5 border-l-2 pl-2">
+			<button
+				className="flex items-center gap-1 text-[10px] tracking-wider uppercase"
+				onClick={() => setShow((s) => !s)}
+			>
+				{show ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+				thinking
+			</button>
+			{show && (
+				<div className="text-muted-foreground/80 mt-1 break-words whitespace-pre-wrap">
+					{text}
+				</div>
+			)}
+		</div>
+	);
+}
+
+function AssistantMessage({
+	blocks,
+	pending,
+	error,
+}: {
+	blocks: UiBlock[];
+	pending: boolean;
+	error?: string;
+}) {
+	const hasAny = blocks.some(
+		(b) => b.kind !== "content" || b.text.length > 0,
+	);
+	return (
+		<div className="min-w-0 max-w-full text-xs leading-relaxed">
+			{blocks.map((b, i) => {
+				switch (b.kind) {
+					case "reasoning":
+						return <ReasoningBlock key={i} text={b.text} />;
+					case "tool_call":
+						return (
+							<div key={i} className="mb-1.5">
+								<ToolCallChip call={b.call} />
+							</div>
+						);
+					case "content":
+						return b.text.length > 0 ? (
+							<div key={i} className="mb-1.5">
+								<Markdown>{b.text}</Markdown>
+							</div>
+						) : null;
+					default:
+						return null;
+				}
+			})}
+			{pending && !hasAny && (
+				<span className="text-muted-foreground animate-pulse">…</span>
+			)}
+			{error && (
+				<div className="text-destructive mt-1.5 text-[11px]">
+					{error}
+				</div>
+			)}
 		</div>
 	);
 }

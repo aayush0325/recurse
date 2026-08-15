@@ -77,7 +77,7 @@ export interface DecompileResult {
 	[k: string]: unknown;
 }
 
-export type CenterTab = "disasm" | "strings" | "imports" | "shell";
+export type CenterTab = "disasm" | "strings" | "imports" | "debug" | "shell";
 
 export interface ModelInfo {
 	id: string;
@@ -103,4 +103,74 @@ export interface Project {
 export interface ShellInfo {
 	id: number;
 	name: string;
+}
+
+export interface ToolCallFn {
+	name: string;
+	arguments: string;
+}
+
+export interface ToolCall {
+	id: string;
+	type: string;
+	function: ToolCallFn;
+}
+
+export interface ChatMessage {
+	role: string;
+	content: string | null;
+	tool_calls?: ToolCall[] | null;
+	tool_call_id?: string | null;
+	reasoning?: string | null;
+}
+
+export type AgentEventKind =
+	| "reasoning"
+	| "token"
+	| "tool_call"
+	| "tool_result"
+	| "done"
+	| "error";
+
+export interface AgentEvent {
+	kind: AgentEventKind;
+	run_id: string;
+	delta?: string;
+	content?: string;
+	message?: string;
+	id?: string;
+	name?: string;
+	arguments?: string;
+	result?: string;
+}
+
+export interface ContextItem {
+	id: string;
+	source: "disasm" | "decompile" | "string" | "function" | "debug";
+	label: string;
+	text: string;
+}
+
+export interface PendingSelection {
+	label: string;
+	text: string;
+	source: ContextItem["source"];
+}
+
+export interface Registers {
+	[key: string]: number;
+}
+
+export interface DebugInsn {
+	addr: number;
+	text?: string;
+	disasm?: string;
+	bytes?: string | null;
+	[k: string]: unknown;
+}
+
+export interface DebugBreakpoint {
+	addr: number;
+	enabled?: boolean;
+	[k: string]: unknown;
 }

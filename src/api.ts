@@ -1,9 +1,13 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
+	AgentEvent,
 	AsmInsn,
 	AsmResult,
 	BinaryInfo,
+	ChatMessage,
+	DebugBreakpoint,
+	DebugInsn,
 	DecompileResult,
 	Function,
 	Import,
@@ -11,6 +15,7 @@ import type {
 	ModelInfo,
 	Project,
 	R2String,
+	Registers,
 	ShellInfo,
 	Xref,
 } from "./types";
@@ -39,8 +44,17 @@ export const api = {
 	decompile: (addr: number) => invoke<DecompileResult>("decompile", { addr }),
 	raw: (cmd: string) => invoke<unknown>("raw", { cmd }),
 	setZoom: (scale: number) => invoke<void>("set_zoom", { scale }),
-	agentChat: (message: string) => invoke<string>("agent_chat", { message }),
+	agentChat: (message: string, onEvent: Channel<AgentEvent>) =>
+		invoke<void>("agent_chat", { message, onEvent }),
 	agentReset: () => invoke<void>("agent_reset"),
+	agentHistory: () => invoke<ChatMessage[]>("agent_history"),
+	debugStart: () => invoke<void>("debug_start"),
+	debugCommand: (cmd: string) => invoke<unknown>("debug_command", { cmd }),
+	debugStop: () => invoke<void>("debug_stop"),
+	debugRegisters: () => invoke<Registers>("debug_registers"),
+	debugDisassemble: (count: number) =>
+		invoke<DebugInsn[]>("debug_disassemble", { count }),
+	debugBreakpoints: () => invoke<DebugBreakpoint[]>("debug_breakpoints"),
 	llmStatus: () => invoke<LlmStatus>("llm_status"),
 	setModel: (id: string) => invoke<void>("set_model", { id }),
 	saveApiKey: (key: string) => invoke<void>("save_api_key", { key }),

@@ -12,11 +12,16 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAnalysisStore } from "@/store/analysisStore";
+import { useContextStore } from "@/store/contextStore";
 import { useUiStore } from "@/store/uiStore";
 import type { CenterTab, DecompileAnnotation } from "@/types";
 
 const ShellPanel = lazy(() =>
 	import("@/components/ShellPanel").then((m) => ({ default: m.ShellPanel })),
+);
+
+const DebugPanel = lazy(() =>
+	import("@/components/DebugPanel").then((m) => ({ default: m.DebugPanel })),
 );
 
 function fmtAddr(a?: number | null) {
@@ -124,11 +129,16 @@ export function CenterPanel() {
 	const decompile = useAnalysisStore((s) => s.decompile);
 	const clearDecompiled = useAnalysisStore((s) => s.clearDecompiled);
 
+	const pending = useContextStore((s) => s.pending);
+	const setPending = useContextStore((s) => s.setPending);
+	const commitPending = useContextStore((s) => s.commitPending);
+
 	const setTabSafe = (t: string) => setTab(t as CenterTab);
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const selectedAddr = selected?.addr;
 	const [shellMounted, setShellMounted] = useState(false);
+	const [debugMounted, setDebugMounted] = useState(false);
 
 	// Mount (and keep mounted) the shell panel the first time the Shell tab is
 	// opened, so its terminals survive tab switches. Adjusting state during
@@ -136,6 +146,40 @@ export function CenterPanel() {
 	if (tab === "shell" && !shellMounted) {
 		setShellMounted(true);
 	}
+	if (tab === "debug" && !debugMounted) {
+		setDebugMounted(true);
+	}
+
+	// Track text selection in the disassembly / decompiler views so the user
+	// can add the selected text to the agent's context (Ctrl+L or the hint).
+	const handleSelection = () => {
+		requestAnimationFrame(() => {
+			const sel = window.getSelection();
+			const text = sel?.toString().trim() ?? "";
+			if (!text) {
+				setPending(null);
+				return;
+			}
+			const anchor = sel?.anchorNode;
+			const inView =
+				anchor instanceof Node &&
+				scrollRef.current?.contains(anchor);
+			if (!inView) {
+				setPending(null);
+				return;
+			}
+			const source =
+				tab === "disasm"
+					? "disasm"
+					: tab === "debug"
+						? "debug"
+						: "decompile";
+			const label = selected
+				? `${fmtAddr(selected.addr)} · ${selected.name ?? "fn"}`
+				: "selection";
+			setPending({ source, label, text });
+		});
+	};
 
 	// Reset scroll whenever the selected function changes so a new function
 	// always renders from the top (no stale scroll position from the previous
@@ -152,6 +196,7 @@ export function CenterPanel() {
 						<TabsTrigger value="disasm">Disassembly</TabsTrigger>
 						<TabsTrigger value="strings">Strings</TabsTrigger>
 						<TabsTrigger value="imports">Imports</TabsTrigger>
+						<TabsTrigger value="debug">Debug</TabsTrigger>
 						<TabsTrigger value="shell">Shell</TabsTrigger>
 					</TabsList>
 				</Tabs>
@@ -188,8 +233,30 @@ export function CenterPanel() {
 			>
 				<div
 					ref={scrollRef}
-					className="scroll-host min-h-0 min-w-0 flex-1 overflow-auto"
+					onMouseUp={handleSelection}
+					className="scroll-host relative min-h-0 min-w-0 flex-1 overflow-auto"
 				>
+					{pending && (
+						<div className="absolute top-2 right-2 z-20 flex items-center gap-1">
+							<Button
+								size="sm"
+								onClick={commitPending}
+								className="shadow"
+								title="Add selection to agent context (Ctrl+L)"
+							>
+								+ Add to agent context
+							</Button>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="shadow"
+								onClick={() => setPending(null)}
+								title="Dismiss"
+							>
+								<X className="h-3.5 w-3.5" />
+							</Button>
+						</div>
+					)}
 					{tab === "disasm" && (
 						<>
 							{selected && (
@@ -307,6 +374,25 @@ export function CenterPanel() {
 					</div>
 				)}
 			</div>
+
+			{debugMounted && (
+				<div
+					className={cn(
+						"min-h-0 min-w-0 flex-1",
+						tab !== "debug" && "hidden",
+					)}
+				>
+					<Suspense
+						fallback={
+							<div className="text-muted-foreground px-3 py-3 text-xs">
+								loading debugger…
+							</div>
+						}
+					>
+						<DebugPanel />
+					</Suspense>
+				</div>
+			)}
 
 			{shellMounted && (
 				<div

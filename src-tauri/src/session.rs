@@ -31,6 +31,16 @@ impl R2Session {
     /// Spawn r2 and load the binary. Analysis is deferred to
     /// [`R2Session::analyze`] so opening never blocks the UI on a long pass.
     pub fn open(path: impl Into<PathBuf>) -> Result<Self, String> {
+        Self::open_with_args(path, vec!["-e", "bin.cache=true"])
+    }
+
+    /// Spawn r2 with extra command-line arguments (e.g. `-d` to start the
+    /// native debugger). Reused by both the analysis session and the debug
+    /// session.
+    pub fn open_with_args(
+        path: impl Into<PathBuf>,
+        args: Vec<&'static str>,
+    ) -> Result<Self, String> {
         let path = path.into();
         let worker_path = path.to_string_lossy().to_string();
 
@@ -39,7 +49,7 @@ impl R2Session {
 
         let join = std::thread::Builder::new()
             .name("r2-worker".into())
-            .spawn(move || worker(&worker_path, rx, start_tx))
+            .spawn(move || worker(&worker_path, rx, start_tx, args))
             .map_err(|e| format!("failed to spawn r2 worker thread: {e}"))?;
 
         start_rx.recv().map_err(|e| e.to_string())??;
@@ -93,10 +103,10 @@ impl Drop for R2Session {
     }
 }
 
-fn worker(path: &str, rx: Receiver<Cmd>, start_tx: Sender<StartupResult>) {
+fn worker(path: &str, rx: Receiver<Cmd>, start_tx: Sender<StartupResult>, args: Vec<&'static str>) {
     let opts = r2pipe::R2PipeSpawnOptions {
         exepath: "r2".into(),
-        args: vec!["-e", "bin.cache=true"],
+        args,
     };
     let mut r2p = match R2Pipe::spawn(path, Some(opts)) {
         Ok(p) => p,

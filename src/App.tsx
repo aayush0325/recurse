@@ -10,6 +10,8 @@ import { NewProjectDialog } from "@/components/NewProjectDialog";
 import { ProjectScreen } from "@/components/ProjectScreen";
 import { useBinaryStore } from "@/store/binaryStore";
 import { useLlmStore } from "@/store/llmStore";
+import { useAgentStore } from "@/store/agentStore";
+import { useContextStore } from "@/store/contextStore";
 import { useProjectStore } from "@/store/projectStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { useUiStore } from "@/store/uiStore";
@@ -26,6 +28,7 @@ function App() {
 		useLlmStore.getState().init();
 		useSettingsStore.getState().initZoom();
 		useProjectStore.getState().loadProjects();
+		useAgentStore.getState().init();
 	}, []);
 
 	useEffect(() => {
@@ -56,6 +59,7 @@ function App() {
 		const onKey = (e: KeyboardEvent) => {
 			if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l") {
 				e.preventDefault();
+				useContextStore.getState().commitPending();
 				setChatOpen(true);
 				setTimeout(() => chatInputRef.current?.focus(), 0);
 			}
@@ -92,14 +96,14 @@ function App() {
 							: "260px 1fr",
 					}}
 				>
-					<aside className="border-border bg-card flex min-w-0 flex-col border-r">
+					<aside className="border-border bg-card flex min-h-0 min-w-0 flex-col border-r">
 						<FunctionList />
 					</aside>
 
 					<CenterPanel />
 
 					{chatOpen && (
-						<aside className="border-border bg-card flex min-w-0 flex-col border-l">
+						<aside className="border-border bg-card flex min-h-0 min-w-0 flex-col border-l">
 							<AgentChat inputRef={chatInputRef} />
 						</aside>
 					)}

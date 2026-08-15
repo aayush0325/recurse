@@ -1,18 +1,22 @@
 mod agent;
 mod commands;
 mod config;
+mod debugger;
 mod engine;
+mod memory;
 mod project;
 mod session;
 mod shell;
+mod tools;
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use agent::{Agent, LlmConfig, ModelInfo};
 
 pub struct AppState {
-    pub session: Mutex<Option<session::R2Session>>,
-    pub agent: Mutex<Agent>,
+    pub session: Arc<Mutex<Option<session::R2Session>>>,
+    pub debug: Arc<Mutex<Option<session::R2Session>>>,
+    pub agent: Arc<Mutex<Agent>>,
     pub llm: Mutex<LlmConfig>,
     pub models: Mutex<Option<Vec<ModelInfo>>>,
     pub project: Mutex<Option<project::Project>>,
@@ -25,8 +29,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
-            session: Mutex::new(None),
-            agent: Mutex::new(Agent::new()),
+            session: Arc::new(Mutex::new(None)),
+            debug: Arc::new(Mutex::new(None)),
+            agent: Arc::new(Mutex::new(Agent::new())),
             llm: Mutex::new(LlmConfig::default()),
             models: Mutex::new(None),
             project: Mutex::new(None),
@@ -49,6 +54,13 @@ pub fn run() {
             commands::set_zoom,
             commands::agent_chat,
             commands::agent_reset,
+            commands::agent_history,
+            commands::debug_start,
+            commands::debug_command,
+            commands::debug_stop,
+            commands::debug_registers,
+            commands::debug_disassemble,
+            commands::debug_breakpoints,
             commands::llm_status,
             commands::set_model,
             commands::save_api_key,
