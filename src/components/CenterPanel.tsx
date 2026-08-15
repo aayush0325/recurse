@@ -1,11 +1,23 @@
 import { RefreshCw, X } from "lucide-react";
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import {
+	lazy,
+	Suspense,
+	useLayoutEffect,
+	useRef,
+	useState,
+	type ReactNode,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import { useAnalysisStore } from "@/store/analysisStore";
 import { useUiStore } from "@/store/uiStore";
 import type { CenterTab, DecompileAnnotation } from "@/types";
+
+const ShellPanel = lazy(() =>
+	import("@/components/ShellPanel").then((m) => ({ default: m.ShellPanel })),
+);
 
 function fmtAddr(a?: number | null) {
 	return typeof a === "number" ? `0x${a.toString(16)}` : "";
@@ -21,7 +33,10 @@ const HL_COLORS: Record<string, string> = {
 	constant_variable: "text-emerald-400",
 };
 
-function highlight(code: string, annotations: DecompileAnnotation[]): ReactNode[] {
+function highlight(
+	code: string,
+	annotations: DecompileAnnotation[],
+): ReactNode[] {
 	const cats = new Array<string>(code.length).fill("");
 	for (const a of annotations) {
 		if (!Number.isFinite(a.start) || !Number.isFinite(a.end)) continue;
@@ -113,6 +128,14 @@ export function CenterPanel() {
 
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const selectedAddr = selected?.addr;
+	const [shellMounted, setShellMounted] = useState(false);
+
+	// Mount (and keep mounted) the shell panel the first time the Shell tab is
+	// opened, so its terminals survive tab switches. Adjusting state during
+	// render is the documented React pattern here (guarded, no effect).
+	if (tab === "shell" && !shellMounted) {
+		setShellMounted(true);
+	}
 
 	// Reset scroll whenever the selected function changes so a new function
 	// always renders from the top (no stale scroll position from the previous
@@ -129,10 +152,11 @@ export function CenterPanel() {
 						<TabsTrigger value="disasm">Disassembly</TabsTrigger>
 						<TabsTrigger value="strings">Strings</TabsTrigger>
 						<TabsTrigger value="imports">Imports</TabsTrigger>
+						<TabsTrigger value="shell">Shell</TabsTrigger>
 					</TabsList>
 				</Tabs>
-				<div className="flex items-center gap-1 pr-2">
-					{tab === "disasm" && (
+				{tab === "disasm" && (
+					<div className="flex items-center gap-1 pr-2">
 						<Button
 							variant="ghost"
 							size="sm"
@@ -141,138 +165,165 @@ export function CenterPanel() {
 						>
 							{decompiling ? "Decompiling…" : "Decompile"}
 						</Button>
-					)}
-					<Button
-						variant="ghost"
-						size="icon"
-						onClick={refreshDisasm}
-						disabled={asmLoading}
-						title="Reload"
-					>
-						<RefreshCw
-							className={asmLoading ? "animate-spin" : ""}
-						/>
-					</Button>
-				</div>
+						<Button
+							variant="ghost"
+							size="icon"
+							onClick={refreshDisasm}
+							disabled={asmLoading}
+							title="Reload"
+						>
+							<RefreshCw
+								className={asmLoading ? "animate-spin" : ""}
+							/>
+						</Button>
+					</div>
+				)}
 			</div>
 
 			<div
-				ref={scrollRef}
-				className="scroll-host min-h-0 min-w-0 flex-1 overflow-auto"
+				className={cn(
+					"min-h-0 min-w-0 flex-1 flex-col",
+					tab === "shell" ? "hidden" : "flex",
+				)}
 			>
-				{tab === "disasm" && (
-					<>
-						{selected && (
-							<div className="border-border bg-card sticky top-0 z-10 flex items-baseline gap-3 border-b px-3 py-1.5">
-								<span className="font-semibold">
-									{selected.name ??
-										selected.signature ??
-										"unknown"}
-								</span>
-								<span className="text-muted-foreground font-mono text-[11px]">
-									{fmtAddr(selected.addr)} ·{" "}
-									{asm?.size ?? selected.size ?? "?"} bytes
-								</span>
-							</div>
-						)}
-						<div className="font-mono text-xs">
-							{asmLoading && (
-								<div className="text-muted-foreground px-3 py-3">
-									disassembling…
+				<div
+					ref={scrollRef}
+					className="scroll-host min-h-0 min-w-0 flex-1 overflow-auto"
+				>
+					{tab === "disasm" && (
+						<>
+							{selected && (
+								<div className="border-border bg-card sticky top-0 z-10 flex items-baseline gap-3 border-b px-3 py-1.5">
+									<span className="font-semibold">
+										{selected.name ??
+											selected.signature ??
+											"unknown"}
+									</span>
+									<span className="text-muted-foreground font-mono text-[11px]">
+										{fmtAddr(selected.addr)} ·{" "}
+										{asm?.size ?? selected.size ?? "?"}{" "}
+										bytes
+									</span>
 								</div>
 							)}
-							{!selected && !asmLoading && (
-								<div className="text-muted-foreground px-3 py-3">
-									Select a function to disassemble it.
-								</div>
-							)}
-							{selected &&
-								!asmLoading &&
-								(!asm?.ops || asm.ops.length === 0) && (
+							<div className="font-mono text-xs">
+								{asmLoading && (
 									<div className="text-muted-foreground px-3 py-3">
-										No instructions.
+										disassembling…
 									</div>
 								)}
-							{asm?.ops?.map((op) => (
-								<OpRow key={op.addr} op={op} />
-							))}
-						</div>
-					</>
-				)}
+								{!selected && !asmLoading && (
+									<div className="text-muted-foreground px-3 py-3">
+										Select a function to disassemble it.
+									</div>
+								)}
+								{selected &&
+									!asmLoading &&
+									(!asm?.ops || asm.ops.length === 0) && (
+										<div className="text-muted-foreground px-3 py-3">
+											No instructions.
+										</div>
+									)}
+								{asm?.ops?.map((op) => (
+									<OpRow key={op.addr} op={op} />
+								))}
+							</div>
+						</>
+					)}
 
-				{tab === "strings" && (
-					<table className="w-full font-mono text-xs">
-						<thead className="bg-card sticky top-0">
-							<tr className="text-muted-foreground text-left text-[11px]">
-								<th className="px-3 py-1.5">Offset</th>
-								<th className="px-3 py-1.5">Type</th>
-								<th className="px-3 py-1.5">String</th>
-							</tr>
-						</thead>
-						<tbody>
-							{strings.map((s) => (
-								<tr
-									key={`${s.vaddr}-${s.string}`}
-									className="hover:bg-accent"
-								>
-									<td className="text-primary px-3 py-px">
-										{fmtAddr(s.vaddr)}
-									</td>
-									<td className="px-3 py-px">
-										{s.type ?? ""}
-									</td>
-									<td
-										className="max-w-0 truncate px-3 py-px"
-										title={s.string}
+					{tab === "strings" && (
+						<table className="w-full font-mono text-xs">
+							<thead className="bg-card sticky top-0">
+								<tr className="text-muted-foreground text-left text-[11px]">
+									<th className="px-3 py-1.5">Offset</th>
+									<th className="px-3 py-1.5">Type</th>
+									<th className="px-3 py-1.5">String</th>
+								</tr>
+							</thead>
+							<tbody>
+								{strings.map((s) => (
+									<tr
+										key={`${s.vaddr}-${s.string}`}
+										className="hover:bg-accent"
 									>
-										{s.string}
-									</td>
+										<td className="text-primary px-3 py-px">
+											{fmtAddr(s.vaddr)}
+										</td>
+										<td className="px-3 py-px">
+											{s.type ?? ""}
+										</td>
+										<td
+											className="max-w-0 truncate px-3 py-px"
+											title={s.string}
+										>
+											{s.string}
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					)}
+
+					{tab === "imports" && (
+						<table className="w-full font-mono text-xs">
+							<thead className="bg-card sticky top-0">
+								<tr className="text-muted-foreground text-left text-[11px]">
+									<th className="px-3 py-1.5">Import</th>
 								</tr>
-							))}
-						</tbody>
-					</table>
+							</thead>
+							<tbody>
+								{imports.map((imp, i) => (
+									<tr key={i} className="hover:bg-accent">
+										<td className="px-3 py-px">
+											{imp.name ?? "(unnamed)"}
+										</td>
+									</tr>
+								))}
+							</tbody>
+						</table>
+					)}
+				</div>
+
+				{tab === "disasm" && decompiled && (
+					<div className="border-border bg-card relative shrink-0 border-t">
+						<pre className="scroll-host text-primary h-64 overflow-auto px-3 py-2 font-mono text-xs">
+							{highlight(decompiled, decompiledAnnotations)}
+						</pre>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="bg-card/80 absolute top-1 right-1 h-6 w-6"
+							onClick={clearDecompiled}
+							title="Close decompiled view"
+						>
+							<X className="h-3.5 w-3.5" />
+						</Button>
+					</div>
 				)}
 
-				{tab === "imports" && (
-					<table className="w-full font-mono text-xs">
-						<thead className="bg-card sticky top-0">
-							<tr className="text-muted-foreground text-left text-[11px]">
-								<th className="px-3 py-1.5">Import</th>
-							</tr>
-						</thead>
-						<tbody>
-							{imports.map((imp, i) => (
-								<tr key={i} className="hover:bg-accent">
-									<td className="px-3 py-px">
-										{imp.name ?? "(unnamed)"}
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
+				{tab === "disasm" && decompileError && (
+					<div className="border-destructive bg-destructive/10 text-destructive m-3 rounded-md border p-2.5 font-mono text-[11px] whitespace-pre-wrap">
+						{decompileError}
+					</div>
 				)}
 			</div>
 
-			{tab === "disasm" && decompiled && (
-				<div className="border-border bg-card relative shrink-0 border-t">
-					<pre className="scroll-host text-primary h-64 overflow-auto px-3 py-2 font-mono text-xs">
-						{highlight(decompiled, decompiledAnnotations)}
-					</pre>
-					<Button
-						variant="ghost"
-						size="icon"
-						className="bg-card/80 absolute top-1 right-1 h-6 w-6"
-						onClick={clearDecompiled}
-						title="Close decompiled view"
+			{shellMounted && (
+				<div
+					className={cn(
+						"min-h-0 min-w-0 flex-1",
+						tab !== "shell" && "hidden",
+					)}
+				>
+					<Suspense
+						fallback={
+							<div className="text-muted-foreground px-3 py-3 text-xs">
+								loading shell…
+							</div>
+						}
 					>
-						<X className="h-3.5 w-3.5" />
-					</Button>
-				</div>
-			)}
-
-			{tab === "disasm" && decompileError && (
-				<div className="border-destructive bg-destructive/10 text-destructive m-3 rounded-md border p-2.5 font-mono text-[11px] whitespace-pre-wrap">
-					{decompileError}
+						<ShellPanel active={tab === "shell"} />
+					</Suspense>
 				</div>
 			)}
 		</div>

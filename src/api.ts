@@ -11,6 +11,7 @@ import type {
 	ModelInfo,
 	Project,
 	R2String,
+	ShellInfo,
 	Xref,
 } from "./types";
 
@@ -56,4 +57,10 @@ export const api = {
 		invoke<void>("project_write_file", { name, path, content }),
 	projectListFiles: (name: string) =>
 		invoke<string[]>("project_list_files", { name }),
+	shellSpawn: () => invoke<ShellInfo>("shell_spawn"),
+	shellWrite: (id: number, data: string) =>
+		invoke<void>("shell_write", { id, data }),
+	shellResize: (id: number, rows: number, cols: number) =>
+		invoke<void>("shell_resize", { id, rows, cols }),
+	shellKill: (id: number) => invoke<void>("shell_kill", { id }),
 };

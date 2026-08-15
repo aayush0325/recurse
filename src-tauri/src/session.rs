@@ -117,8 +117,7 @@ fn worker(path: &str, rx: Receiver<Cmd>, start_tx: Sender<StartupResult>) {
                 let result: Result<Value, String> = r2p
                     .cmd(&cmd)
                     .map(|text| {
-                        serde_json::from_str::<Value>(&text)
-                            .unwrap_or_else(|_| Value::String(text))
+                        serde_json::from_str::<Value>(&text).unwrap_or_else(|_| Value::String(text))
                     })
                     .map_err(|e| e.to_string());
                 let _ = resp.send(result);

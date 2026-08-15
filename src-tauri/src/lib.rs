@@ -4,6 +4,7 @@ mod config;
 mod engine;
 mod project;
 mod session;
+mod shell;
 
 use std::sync::Mutex;
 
@@ -15,6 +16,7 @@ pub struct AppState {
     pub llm: Mutex<LlmConfig>,
     pub models: Mutex<Option<Vec<ModelInfo>>>,
     pub project: Mutex<Option<project::Project>>,
+    pub shell: shell::ShellManager,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -28,6 +30,7 @@ pub fn run() {
             llm: Mutex::new(LlmConfig::default()),
             models: Mutex::new(None),
             project: Mutex::new(None),
+            shell: shell::ShellManager::new(),
         })
         .invoke_handler(tauri::generate_handler![
             commands::open_binary,
@@ -57,6 +60,11 @@ pub fn run() {
             commands::project_read_file,
             commands::project_write_file,
             commands::project_list_files,
+            commands::shell_spawn,
+            commands::shell_write,
+            commands::shell_resize,
+            commands::shell_kill,
+            commands::shell_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

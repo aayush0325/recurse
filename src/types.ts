@@ -77,7 +77,7 @@ export interface DecompileResult {
 	[k: string]: unknown;
 }
 
-export type CenterTab = "disasm" | "strings" | "imports";
+export type CenterTab = "disasm" | "strings" | "imports" | "shell";
 
 export interface ModelInfo {
 	id: string;
@@ -98,4 +98,9 @@ export interface Project {
 	binary_path: string;
 	created_at: number;
 	updated_at: number;
+}
+
+export interface ShellInfo {
+	id: number;
+	name: string;
 }

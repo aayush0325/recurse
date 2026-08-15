@@ -17,8 +17,7 @@ pub struct Project {
 }
 
 fn root() -> Result<PathBuf, String> {
-    let home =
-        dirs::home_dir().ok_or_else(|| "could not determine home directory".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| "could not determine home directory".to_string())?;
     Ok(home.join(".recurse"))
 }
 
