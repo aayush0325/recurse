@@ -99,18 +99,35 @@ body {
 		ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
-/* thin scrollbars */
+/* compact scrollbars (WebKit) */
 ::-webkit-scrollbar {
-	width: 8px;
-	height: 8px;
+	width: 6px;
+	height: 6px;
 }
 ::-webkit-scrollbar-thumb {
-	background: oklab(0.3 0 0);
-	border-radius: 4px;
+	background: oklab(0.34 0 0);
+	border-radius: 9999px;
+	border: 1px solid transparent;
+	background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-	background: oklab(0.36 0 0);
+	background: oklab(0.45 0 0);
+	background-clip: padding-box;
 }
 ::-webkit-scrollbar-track {
 	background: transparent;
+}
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+/* compact scrollbars (Firefox) */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: oklab(0.34 0 0) transparent;
+}
+
+/* Scroll areas reserve the gutter so bars never overlap content. */
+.scroll-host {
+	scrollbar-gutter: stable;
 }

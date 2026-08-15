@@ -1,7 +1,13 @@
 import { create } from "zustand";
 
 import { api } from "../api";
-import type { AsmResult, Function, Import, R2String } from "../types";
+import type {
+	AsmResult,
+	DecompileAnnotation,
+	Function,
+	Import,
+	R2String,
+} from "../types";
 import { useUiStore } from "./uiStore";
 
 interface AnalysisState {
@@ -12,6 +18,7 @@ interface AnalysisState {
 	strings: R2String[];
 	imports: Import[];
 	decompiled: string | null;
+	decompiledAnnotations: DecompileAnnotation[];
 	decompileError: string | null;
 	decompiling: boolean;
 
@@ -25,6 +32,7 @@ interface AnalysisState {
 	selectFn: (fn: Function) => void;
 	refreshDisasm: () => Promise<void>;
 	decompile: () => Promise<void>;
+	clearDecompiled: () => void;
 }
 
 const initial = {
@@ -35,6 +43,7 @@ const initial = {
 	strings: [] as R2String[],
 	imports: [] as Import[],
 	decompiled: null as string | null,
+	decompiledAnnotations: [] as DecompileAnnotation[],
 	decompileError: null as string | null,
 	decompiling: false,
 };
@@ -55,50 +64,79 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 		useUiStore.getState().setTab("disasm");
 		set({
 			selected: fn,
+			asm: null,
 			asmLoading: true,
 			decompiled: null,
+			decompiledAnnotations: [],
 			decompileError: null,
+			decompiling: false,
 		});
-		api.functionDisasm(fn.addr)
-			.then((asm) => set({ asm }))
-			.catch((e) => {
-				set({ asm: null });
-				setErr(String(e));
+		const addr = fn.addr;
+		api.functionDisasm(addr)
+			.then((asm) => {
+				if (get().selected?.addr === addr) set({ asm });
 			})
-			.finally(() => set({ asmLoading: false }));
+			.catch((e) => {
+				if (get().selected?.addr === addr) {
+					set({ asm: null });
+					setErr(String(e));
+				}
+			})
+			.finally(() => {
+				if (get().selected?.addr === addr) set({ asmLoading: false });
+			});
 	},
 
 	refreshDisasm: async () => {
 		const sel = get().selected;
 		if (!sel) return;
+		const addr = sel.addr;
 		set({ asmLoading: true });
 		try {
-			set({ asm: await api.functionDisasm(sel.addr) });
+			const asm = await api.functionDisasm(addr);
+			if (get().selected?.addr === addr) set({ asm });
 		} catch (e) {
-			setErr(String(e));
+			if (get().selected?.addr === addr) setErr(String(e));
 		} finally {
-			set({ asmLoading: false });
+			if (get().selected?.addr === addr) set({ asmLoading: false });
 		}
 	},
 
 	decompile: async () => {
 		const sel = get().selected;
 		if (!sel) return;
-		set({ decompiling: true, decompiled: null, decompileError: null });
+		const addr = sel.addr;
+		set({
+			decompiling: true,
+			decompiled: null,
+			decompiledAnnotations: [],
+			decompileError: null,
+		});
 		try {
-			const out = await api.decompile(sel.addr);
-			set({
-				decompiled:
-					typeof out === "string"
-						? out
-						: JSON.stringify(out, null, 2),
-			});
+			const out = await api.decompile(addr);
+			if (get().selected?.addr !== addr) return;
+			const code =
+				typeof out === "string"
+					? out
+					: out?.code ?? JSON.stringify(out, null, 2);
+			const annotations =
+				typeof out === "string" ? [] : (out.annotations ?? []);
+			set({ decompiled: code, decompiledAnnotations: annotations });
 		} catch (e) {
+			if (get().selected?.addr !== addr) return;
 			set({
 				decompileError: `${e}\n\nThe decompiler plugin is not available on this install.`,
 			});
 		} finally {
-			set({ decompiling: false });
+			if (get().selected?.addr === addr) set({ decompiling: false });
 		}
 	},
+
+	clearDecompiled: () =>
+		set({
+			decompiled: null,
+			decompiledAnnotations: [],
+			decompileError: null,
+			decompiling: false,
+		}),
 }));

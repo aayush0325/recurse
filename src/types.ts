@@ -61,6 +61,22 @@ export interface Xref {
 	[k: string]: unknown;
 }
 
+export interface DecompileAnnotation {
+	start: number;
+	end: number;
+	type?: string;
+	name?: string;
+	offset?: number;
+	syntax_highlight?: string;
+	[k: string]: unknown;
+}
+
+export interface DecompileResult {
+	code?: string;
+	annotations?: DecompileAnnotation[];
+	[k: string]: unknown;
+}
+
 export type CenterTab = "disasm" | "strings" | "imports";
 
 export interface ModelInfo {

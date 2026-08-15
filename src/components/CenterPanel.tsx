@@ -1,13 +1,54 @@
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, X } from "lucide-react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAnalysisStore } from "@/store/analysisStore";
 import { useUiStore } from "@/store/uiStore";
-import type { CenterTab } from "@/types";
+import type { CenterTab, DecompileAnnotation } from "@/types";
 
 function fmtAddr(a?: number | null) {
 	return typeof a === "number" ? `0x${a.toString(16)}` : "";
+}
+
+const HL_COLORS: Record<string, string> = {
+	keyword: "text-pink-400",
+	comment: "text-muted-foreground italic",
+	datatype: "text-sky-400",
+	function_name: "text-yellow-400",
+	function_parameter: "text-orange-300",
+	local_variable: "text-purple-300",
+	constant_variable: "text-emerald-400",
+};
+
+function highlight(code: string, annotations: DecompileAnnotation[]): ReactNode[] {
+	const cats = new Array<string>(code.length).fill("");
+	for (const a of annotations) {
+		if (!Number.isFinite(a.start) || !Number.isFinite(a.end)) continue;
+		const color = HL_COLORS[a.syntax_highlight ?? a.type ?? ""];
+		if (!color) continue;
+		for (let i = a.start; i < a.end && i < code.length; i++) {
+			cats[i] = color;
+		}
+	}
+	const spans: ReactNode[] = [];
+	let i = 0;
+	while (i < code.length) {
+		const color = cats[i];
+		let j = i;
+		while (j < code.length && cats[j] === color) j++;
+		spans.push(
+			color ? (
+				<span key={i} className={color}>
+					{code.slice(i, j)}
+				</span>
+			) : (
+				code.slice(i, j)
+			),
+		);
+		i = j;
+	}
+	return spans;
 }
 
 function OpRow({
@@ -59,12 +100,26 @@ export function CenterPanel() {
 	const strings = useAnalysisStore((s) => s.strings);
 	const imports = useAnalysisStore((s) => s.imports);
 	const decompiled = useAnalysisStore((s) => s.decompiled);
+	const decompiledAnnotations = useAnalysisStore(
+		(s) => s.decompiledAnnotations,
+	);
 	const decompileError = useAnalysisStore((s) => s.decompileError);
 	const decompiling = useAnalysisStore((s) => s.decompiling);
 	const refreshDisasm = useAnalysisStore((s) => s.refreshDisasm);
 	const decompile = useAnalysisStore((s) => s.decompile);
+	const clearDecompiled = useAnalysisStore((s) => s.clearDecompiled);
 
 	const setTabSafe = (t: string) => setTab(t as CenterTab);
+
+	const scrollRef = useRef<HTMLDivElement>(null);
+	const selectedAddr = selected?.addr;
+
+	// Reset scroll whenever the selected function changes so a new function
+	// always renders from the top (no stale scroll position from the previous
+	// function's assembly/decompiled view). Runs pre-paint to avoid a flash.
+	useLayoutEffect(() => {
+		scrollRef.current?.scrollTo({ top: 0 });
+	}, [selectedAddr]);
 
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -101,11 +156,14 @@ export function CenterPanel() {
 				</div>
 			</div>
 
-			<div className="min-h-0 min-w-0 flex-1 overflow-auto">
+			<div
+				ref={scrollRef}
+				className="scroll-host min-h-0 min-w-0 flex-1 overflow-auto"
+			>
 				{tab === "disasm" && (
-					<div className="flex min-h-0 flex-col">
+					<>
 						{selected && (
-							<div className="border-border bg-card sticky top-0 flex items-baseline gap-3 border-b px-3 py-1.5">
+							<div className="border-border bg-card sticky top-0 z-10 flex items-baseline gap-3 border-b px-3 py-1.5">
 								<span className="font-semibold">
 									{selected.name ??
 										selected.signature ??
@@ -139,22 +197,7 @@ export function CenterPanel() {
 								<OpRow key={op.addr} op={op} />
 							))}
 						</div>
-						{decompiled && (
-							<div className="border-border border-t">
-								<div className="text-muted-foreground px-3 py-2 text-[11px] font-semibold tracking-wider uppercase">
-									Decompiled (pseudo-C)
-								</div>
-								<pre className="bg-background text-primary max-h-72 overflow-auto px-3 py-2 font-mono text-xs">
-									{decompiled}
-								</pre>
-							</div>
-						)}
-						{decompileError && (
-							<div className="border-destructive bg-destructive/10 text-destructive m-3 rounded-md border p-2.5 font-mono text-[11px] whitespace-pre-wrap">
-								{decompileError}
-							</div>
-						)}
-					</div>
+					</>
 				)}
 
 				{tab === "strings" && (
@@ -209,6 +252,37 @@ export function CenterPanel() {
 					</table>
 				)}
 			</div>
+
+			{tab === "disasm" && (decompiled || decompileError) && (
+				<div className="border-border bg-card shrink-0 border-t">
+					{decompiled && (
+						<>
+							<div className="border-border text-muted-foreground flex items-center justify-between border-b px-3 py-1">
+								<span className="text-[11px] font-semibold tracking-wider uppercase">
+									Decompiled (pseudo-C)
+								</span>
+								<Button
+									variant="ghost"
+									size="icon"
+									className="h-5 w-5"
+									onClick={clearDecompiled}
+									title="Close decompiled view"
+								>
+									<X className="h-3.5 w-3.5" />
+								</Button>
+							</div>
+							<pre className="scroll-host text-primary max-h-[38vh] overflow-auto px-3 py-2 font-mono text-xs">
+								{highlight(decompiled, decompiledAnnotations)}
+							</pre>
+						</>
+					)}
+					{decompileError && (
+						<div className="border-destructive bg-destructive/10 text-destructive m-3 rounded-md border p-2.5 font-mono text-[11px] whitespace-pre-wrap">
+							{decompileError}
+						</div>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }
