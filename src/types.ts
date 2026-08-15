@@ -92,3 +92,10 @@ export interface LlmStatus {
 	configured: boolean;
 	model: string;
 }
+
+export interface Project {
+	name: string;
+	binary_path: string;
+	created_at: number;
+	updated_at: number;
+}

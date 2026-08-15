@@ -23,7 +23,7 @@
 	--border: oklab(0.88 0 0);
 	--input: oklab(0.88 0 0);
 	--ring: oklab(0.55 0 0);
-	--radius: 0.5rem;
+	--radius: 0.25rem;
 }
 
 .dark {

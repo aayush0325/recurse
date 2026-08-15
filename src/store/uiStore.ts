@@ -12,6 +12,8 @@ interface UiState {
 	setClient: (c: string | null) => void;
 	err: string | null;
 	setErr: (e: string | null) => void;
+	newProjectOpen: boolean;
+	setNewProjectOpen: (b: boolean) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -24,4 +26,6 @@ export const useUiStore = create<UiState>((set) => ({
 	setClient: (client) => set({ client }),
 	err: null,
 	setErr: (err) => set({ err }),
+	newProjectOpen: false,
+	setNewProjectOpen: (newProjectOpen) => set({ newProjectOpen }),
 }));

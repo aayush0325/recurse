@@ -5,6 +5,7 @@ use tauri::State;
 use crate::agent::{self, ModelInfo};
 use crate::config;
 use crate::engine;
+use crate::project::{self, Project};
 use crate::session::R2Session;
 use crate::AppState;
 
@@ -49,6 +50,10 @@ pub fn analyze(state: State<'_, AppState>) -> Result<(), String> {
 #[tauri::command]
 pub fn close_binary(state: State<'_, AppState>) -> Result<(), String> {
     session(&state)?.take();
+    *state
+        .project
+        .lock()
+        .map_err(|e| format!("project lock poisoned: {e}"))? = None;
     Ok(())
 }
 
@@ -238,4 +243,54 @@ pub fn list_models(refresh: bool, state: State<'_, AppState>) -> Result<Vec<Mode
         .map_err(|e| format!("models lock poisoned: {e}"))?;
     *guard = Some(models.clone());
     Ok(models)
+}
+
+#[tauri::command]
+pub fn list_projects() -> Result<Vec<Project>, String> {
+    project::list()
+}
+
+#[tauri::command]
+pub fn create_project(
+    name: String,
+    binary_path: String,
+    state: State<'_, AppState>,
+) -> Result<Project, String> {
+    let p = project::create(&name, &binary_path)?;
+    *state
+        .project
+        .lock()
+        .map_err(|e| format!("project lock poisoned: {e}"))? = Some(p.clone());
+    Ok(p)
+}
+
+#[tauri::command]
+pub fn open_project(name: String, state: State<'_, AppState>) -> Result<Project, String> {
+    let p = project::get(&name)?;
+    project::touch(&name)?;
+    *state
+        .project
+        .lock()
+        .map_err(|e| format!("project lock poisoned: {e}"))? = Some(p.clone());
+    Ok(p)
+}
+
+#[tauri::command]
+pub fn delete_project(name: String) -> Result<(), String> {
+    project::remove(&name)
+}
+
+#[tauri::command]
+pub fn project_read_file(name: String, path: String) -> Result<String, String> {
+    project::read_file(&name, &path)
+}
+
+#[tauri::command]
+pub fn project_write_file(name: String, path: String, content: String) -> Result<(), String> {
+    project::write_file(&name, &path, &content)
+}
+
+#[tauri::command]
+pub fn project_list_files(name: String) -> Result<Vec<String>, String> {
+    project::list_files(&name)
 }

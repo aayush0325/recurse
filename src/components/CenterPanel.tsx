@@ -253,34 +253,26 @@ export function CenterPanel() {
 				)}
 			</div>
 
-			{tab === "disasm" && (decompiled || decompileError) && (
-				<div className="border-border bg-card shrink-0 border-t">
-					{decompiled && (
-						<>
-							<div className="border-border text-muted-foreground flex items-center justify-between border-b px-3 py-1">
-								<span className="text-[11px] font-semibold tracking-wider uppercase">
-									Decompiled (pseudo-C)
-								</span>
-								<Button
-									variant="ghost"
-									size="icon"
-									className="h-5 w-5"
-									onClick={clearDecompiled}
-									title="Close decompiled view"
-								>
-									<X className="h-3.5 w-3.5" />
-								</Button>
-							</div>
-							<pre className="scroll-host text-primary max-h-[38vh] overflow-auto px-3 py-2 font-mono text-xs">
-								{highlight(decompiled, decompiledAnnotations)}
-							</pre>
-						</>
-					)}
-					{decompileError && (
-						<div className="border-destructive bg-destructive/10 text-destructive m-3 rounded-md border p-2.5 font-mono text-[11px] whitespace-pre-wrap">
-							{decompileError}
-						</div>
-					)}
+			{tab === "disasm" && decompiled && (
+				<div className="border-border bg-card relative shrink-0 border-t">
+					<pre className="scroll-host text-primary h-64 overflow-auto px-3 py-2 font-mono text-xs">
+						{highlight(decompiled, decompiledAnnotations)}
+					</pre>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="bg-card/80 absolute top-1 right-1 h-6 w-6"
+						onClick={clearDecompiled}
+						title="Close decompiled view"
+					>
+						<X className="h-3.5 w-3.5" />
+					</Button>
+				</div>
+			)}
+
+			{tab === "disasm" && decompileError && (
+				<div className="border-destructive bg-destructive/10 text-destructive m-3 rounded-md border p-2.5 font-mono text-[11px] whitespace-pre-wrap">
+					{decompileError}
 				</div>
 			)}
 		</div>

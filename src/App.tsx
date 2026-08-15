@@ -6,16 +6,16 @@ import { CenterPanel } from "@/components/CenterPanel";
 import { Console } from "@/components/Console";
 import { FunctionList } from "@/components/FunctionList";
 import { Header } from "@/components/Header";
-import { pickBinary } from "@/api";
+import { NewProjectDialog } from "@/components/NewProjectDialog";
+import { ProjectScreen } from "@/components/ProjectScreen";
 import { useBinaryStore } from "@/store/binaryStore";
 import { useLlmStore } from "@/store/llmStore";
+import { useProjectStore } from "@/store/projectStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { useUiStore } from "@/store/uiStore";
 
 function App() {
 	const binary = useBinaryStore((s) => s.binary);
-	const busy = useBinaryStore((s) => s.busy);
-	const openBinary = useBinaryStore((s) => s.openBinary);
 	const err = useUiStore((s) => s.err);
 	const setErr = useUiStore((s) => s.setErr);
 	const chatOpen = useUiStore((s) => s.chatOpen);
@@ -25,6 +25,7 @@ function App() {
 	useEffect(() => {
 		useLlmStore.getState().init();
 		useSettingsStore.getState().initZoom();
+		useProjectStore.getState().loadProjects();
 	}, []);
 
 	useEffect(() => {
@@ -40,6 +41,11 @@ function App() {
 			} else if (k === "0") {
 				e.preventDefault();
 				useSettingsStore.getState().resetZoom();
+			} else if (k === "n") {
+				e.preventDefault();
+				if (!useBinaryStore.getState().binary) {
+					useUiStore.getState().setNewProjectOpen(true);
+				}
 			}
 		};
 		window.addEventListener("keydown", onKey);
@@ -76,24 +82,7 @@ function App() {
 			)}
 
 			{!binary ? (
-				<div className="flex flex-1 flex-col items-center justify-center gap-2">
-					<div className="text-primary text-5xl">◈</div>
-					<h1 className="text-2xl font-bold">Recurse</h1>
-					<p className="text-muted-foreground max-w-md text-center leading-relaxed">
-						Agentic reverse engineering on a live analysis session.
-						Open a binary to start analyzing.
-					</p>
-					<Button
-						size="lg"
-						onClick={async () => {
-							const path = await pickBinary();
-							if (path) openBinary(path);
-						}}
-						disabled={busy}
-					>
-						{busy ? "Analyzing…" : "Open Binary"}
-					</Button>
-				</div>
+				<ProjectScreen />
 			) : (
 				<div
 					className="grid min-h-0 flex-1 overflow-hidden"
@@ -118,6 +107,7 @@ function App() {
 			)}
 
 			<Console />
+			<NewProjectDialog />
 		</div>
 	);
 }

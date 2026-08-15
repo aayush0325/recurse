@@ -10,16 +10,19 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { pickBinary } from "@/api";
 import { useBinaryStore } from "@/store/binaryStore";
+import { useAnalysisStore } from "@/store/analysisStore";
+import { useProjectStore } from "@/store/projectStore";
 import { useUiStore } from "@/store/uiStore";
 import { useSettingsStore } from "@/store/settingsStore";
 
 export function Header() {
 	const binary = useBinaryStore((s) => s.binary);
 	const busy = useBinaryStore((s) => s.busy);
-	const openBinary = useBinaryStore((s) => s.openBinary);
-	const closeBinary = useBinaryStore((s) => s.closeBinary);
+	const funcs = useAnalysisStore((s) => s.funcs);
+	const strings = useAnalysisStore((s) => s.strings);
+	const project = useProjectStore((s) => s.current);
+	const close = useProjectStore((s) => s.close);
 	const chatOpen = useUiStore((s) => s.chatOpen);
 	const toggleChat = useUiStore((s) => s.toggleChat);
 	const zoomLevel = useSettingsStore((s) => s.zoomLevel);
@@ -30,11 +33,6 @@ export function Header() {
 	const bin = binary?.info?.bin;
 	const file = binary?.path.split(/[\\/]/).pop();
 	const zoomPct = Math.round(Math.pow(1.2, zoomLevel) * 100);
-
-	const onOpen = async () => {
-		const path = await pickBinary();
-		if (path) openBinary(path);
-	};
 
 	return (
 		<header className="border-border bg-card flex items-center gap-3 border-b px-3 py-2">
@@ -48,9 +46,17 @@ export function Header() {
 
 			{binary && (
 				<div className="flex flex-1 items-center gap-1.5 overflow-hidden">
+					{project && (
+						<Badge
+							variant="outline"
+							className="text-primary font-mono"
+						>
+							{project.name}
+						</Badge>
+					)}
 					<Badge
 						variant="outline"
-						className="text-primary max-w-[260px] truncate font-mono"
+						className="text-muted-foreground max-w-[260px] truncate font-mono"
 					>
 						{file}
 					</Badge>
@@ -59,36 +65,35 @@ export function Header() {
 						{bin?.bits ? `${bin.bits}bit` : "?"}
 					</Badge>
 					<Badge variant="secondary">
-						{binary.function_count} funcs
+						{funcs.length} funcs
 					</Badge>
 					<Badge variant="secondary">
-						{binary.string_count} strings
+						{strings.length} strings
 					</Badge>
 				</div>
 			)}
 
 			<div className="ml-auto flex items-center gap-2">
-				<Button
-					variant={chatOpen ? "secondary" : "ghost"}
-					size="sm"
-					onClick={toggleChat}
-					title="Toggle agent chat (Ctrl+L)"
-				>
-					<MessageSquare /> Chat
-				</Button>
+				{binary && (
+					<Button
+						variant={chatOpen ? "secondary" : "ghost"}
+						size="sm"
+						onClick={toggleChat}
+						title="Toggle agent chat (Ctrl+L)"
+					>
+						<MessageSquare /> Chat
+					</Button>
+				)}
 				{binary && (
 					<Button
 						variant="outline"
 						size="sm"
-						onClick={closeBinary}
+						onClick={close}
 						disabled={busy}
 					>
 						<X /> Close
 					</Button>
 				)}
-				<Button size="sm" onClick={onOpen} disabled={busy}>
-					{busy ? "Analyzing…" : "Open Binary"}
-				</Button>
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
 						<Button

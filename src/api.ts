@@ -9,6 +9,7 @@ import type {
 	Import,
 	LlmStatus,
 	ModelInfo,
+	Project,
 	R2String,
 	Xref,
 } from "./types";
@@ -44,4 +45,15 @@ export const api = {
 	saveApiKey: (key: string) => invoke<void>("save_api_key", { key }),
 	listModels: (refresh = false) =>
 		invoke<ModelInfo[]>("list_models", { refresh }),
+	listProjects: () => invoke<Project[]>("list_projects"),
+	createProject: (name: string, binaryPath: string) =>
+		invoke<Project>("create_project", { name, binaryPath }),
+	openProject: (name: string) => invoke<Project>("open_project", { name }),
+	deleteProject: (name: string) => invoke<void>("delete_project", { name }),
+	projectReadFile: (name: string, path: string) =>
+		invoke<string>("project_read_file", { name, path }),
+	projectWriteFile: (name: string, path: string, content: string) =>
+		invoke<void>("project_write_file", { name, path, content }),
+	projectListFiles: (name: string) =>
+		invoke<string[]>("project_list_files", { name }),
 };
