@@ -24,6 +24,10 @@ const DebugPanel = lazy(() =>
 	import("@/components/DebugPanel").then((m) => ({ default: m.DebugPanel })),
 );
 
+const GraphPanel = lazy(() =>
+	import("@/components/GraphPanel").then((m) => ({ default: m.GraphPanel })),
+);
+
 function fmtAddr(a?: number | null) {
 	return typeof a === "number" ? `0x${a.toString(16)}` : "";
 }
@@ -139,6 +143,7 @@ export function CenterPanel() {
 	const selectedAddr = selected?.addr;
 	const [shellMounted, setShellMounted] = useState(false);
 	const [debugMounted, setDebugMounted] = useState(false);
+	const [viewMode, setViewMode] = useState<"linear" | "graph">("linear");
 
 	// Mount (and keep mounted) the shell panel the first time the Shell tab is
 	// opened, so its terminals survive tab switches. Adjusting state during
@@ -202,6 +207,32 @@ export function CenterPanel() {
 				</Tabs>
 				{tab === "disasm" && (
 					<div className="flex items-center gap-1 pr-2">
+						<div className="border-border flex overflow-hidden rounded-md border">
+							<button
+								className={cn(
+									"px-2 py-1 text-[11px]",
+									viewMode === "linear"
+										? "bg-primary text-primary-foreground"
+										: "hover:bg-accent",
+								)}
+								onClick={() => setViewMode("linear")}
+								title="Linear disassembly"
+							>
+								Linear
+							</button>
+							<button
+								className={cn(
+									"px-2 py-1 text-[11px]",
+									viewMode === "graph"
+										? "bg-primary text-primary-foreground"
+										: "hover:bg-accent",
+								)}
+								onClick={() => setViewMode("graph")}
+								title="Control-flow graph (pan/zoom)"
+							>
+								Graph
+							</button>
+						</div>
 						<Button
 							variant="ghost"
 							size="sm"
@@ -231,10 +262,22 @@ export function CenterPanel() {
 					tab === "shell" ? "hidden" : "flex",
 				)}
 			>
-				<div
-					ref={scrollRef}
-					onMouseUp={handleSelection}
-					className="scroll-host relative min-h-0 min-w-0 flex-1 overflow-auto"
+				{tab === "disasm" && viewMode === "graph" && selected ? (
+					<Suspense
+						fallback={
+							<div className="text-muted-foreground px-3 py-3 text-xs">
+								loading graph…
+							</div>
+						}
+					>
+						<GraphPanel addr={selected.addr} />
+					</Suspense>
+				) : (
+					<>
+						<div
+							ref={scrollRef}
+							onMouseUp={handleSelection}
+							className="scroll-host relative min-h-0 min-w-0 flex-1 overflow-auto"
 				>
 					{pending && (
 						<div className="absolute top-2 right-2 z-20 flex items-center gap-1">
@@ -372,6 +415,8 @@ export function CenterPanel() {
 					<div className="border-destructive bg-destructive/10 text-destructive m-3 rounded-md border p-2.5 font-mono text-[11px] whitespace-pre-wrap">
 						{decompileError}
 					</div>
+				)}
+					</>
 				)}
 			</div>
 

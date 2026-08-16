@@ -14,6 +14,7 @@ import type {
 	LlmStatus,
 	ModelInfo,
 	Project,
+	R2Graph,
 	R2String,
 	Registers,
 	ShellInfo,
@@ -36,6 +37,7 @@ export const api = {
 	functionAt: (addr: number) => invoke<Function>("function_at", { addr }),
 	functionDisasm: (addr: number) =>
 		invoke<AsmResult>("function_disasm", { addr }),
+	functionGraph: (addr: number) => invoke<R2Graph[]>("function_graph", { addr }),
 	disassemble: (addr: number, count: number) =>
 		invoke<AsmInsn[]>("disassemble", { addr, count }),
 	strings: () => invoke<R2String[]>("strings"),

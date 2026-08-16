@@ -41,6 +41,13 @@ pub fn function_disasm(s: &R2Session, addr: u64) -> Result<Value, String> {
     s.run(&format!("pdfj @ {addr:#x}"))
 }
 
+/// `agfj @ addr` — JSON control-flow graph (basic blocks with per-block
+/// disassembly, plus each block's `jump`/`fail` edges) for the function
+/// containing `addr`. Rendered as an interactive graph in the UI.
+pub fn function_graph(s: &R2Session, addr: u64) -> Result<Value, String> {
+    s.run(&format!("agfj @ {addr:#x}"))
+}
+
 /// `izzj` — all strings referenced in the binary.
 pub fn strings(s: &R2Session) -> Result<Value, String> {
     s.run("izzj")

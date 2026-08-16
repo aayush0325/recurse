@@ -5,6 +5,8 @@ Agentic reverse engineering environment — a Ghidra-class desktop app in the sp
 of an existing RE toolchain: **[radare2](https://rada.re/n/)** does all parsing, analysis,
 disassembly, xrefs, strings and imports; **r2ghidra** (optional) provides decompilation.
 
+![Recurse demo](public/recurse_demo.png)
+
 ## Features
 
 - Cursor-style workspace: function list, disassembly/strings/imports tabs, and a chat

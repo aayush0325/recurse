@@ -31,6 +31,44 @@ function App() {
 		useAgentStore.getState().init();
 	}, []);
 
+	// Disable whole-app pinch / ctrl+wheel zoom entirely, and let only the graph
+	// zoom. Tauri's zoom-hotkey polyfill (when enabled) listens on `mousewheel`
+	// and scales the webview via set_webview_zoom — we stop that outright. We
+	// also preventDefault on `wheel` (without stopping propagation) so any
+	// native page zoom is cancelled while React Flow still receives the event
+	// and zooms the graph when the wheel lands on its viewport.
+	useEffect(() => {
+		const kill = ((e: Event) => {
+			const ev = e as WheelEvent;
+			if (!(ev.ctrlKey || ev.metaKey)) return;
+			ev.preventDefault();
+			ev.stopImmediatePropagation();
+		}) as EventListener;
+		const stop = ((e: Event) => {
+			const ev = e as WheelEvent;
+			if (!(ev.ctrlKey || ev.metaKey)) return;
+			ev.preventDefault();
+		}) as EventListener;
+		const w = window as unknown as {
+			addEventListener: (
+				t: string,
+				l: EventListener,
+				o?: AddEventListenerOptions,
+			) => void;
+			removeEventListener: (
+				t: string,
+				l: EventListener,
+				o?: boolean | EventListenerOptions,
+			) => void;
+		};
+		w.addEventListener("mousewheel", kill, { capture: true, passive: false });
+		w.addEventListener("wheel", stop, { capture: true, passive: false });
+		return () => {
+			w.removeEventListener("mousewheel", kill, true);
+			w.removeEventListener("wheel", stop, true);
+		};
+	}, []);
+
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			if (!(e.ctrlKey || e.metaKey)) return;

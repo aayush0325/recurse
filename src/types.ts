@@ -174,3 +174,28 @@ export interface DebugBreakpoint {
 	enabled?: boolean;
 	[k: string]: unknown;
 }
+
+export interface GraphOp {
+	addr: number;
+	disasm?: string;
+	bytes?: string | null;
+	type?: string;
+	[k: string]: unknown;
+}
+
+export interface GraphBlock {
+	addr: number;
+	size?: number;
+	jump?: number | null;
+	fail?: number | null;
+	ops?: GraphOp[];
+	[k: string]: unknown;
+}
+
+export interface R2Graph {
+	name?: string;
+	addr?: number;
+	size?: number;
+	blocks?: GraphBlock[];
+	[k: string]: unknown;
+}

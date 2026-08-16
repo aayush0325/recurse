@@ -83,6 +83,10 @@ body,
 #root {
 	height: 100%;
 	margin: 0;
+	/* Disable browser touch pinch-zoom of the whole app; React Flow opts back
+	   in via `.react-flow { touch-action: none }` so it can zoom the graph. */
+	touch-action: pan-x pan-y;
+	overscroll-behavior: none;
 }
 
 body {
@@ -130,4 +134,51 @@ body {
 /* Scroll areas reserve the gutter so bars never overlap content. */
 .scroll-host {
 	scrollbar-gutter: stable;
+}
+
+/* CFG graph nodes render their own card — strip React Flow's default box. */
+.react-flow__node-cfgnode {
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	padding: 0;
+}
+/* Let React Flow handle all touch gestures (incl. pinch-zoom) on the graph. */
+.react-flow {
+	touch-action: none;
+}
+.react-flow__edge-textbg {
+	fill: transparent;
+}
+div.react-flow__controls {
+	background: #0c0c0c;
+	border: 1px solid #2a2a2a;
+	border-radius: 4px;
+	box-shadow: 0 1px 6px oklab(0 0 0 / 0.5);
+	overflow: hidden;
+}
+.react-flow__controls .react-flow__controls-button {
+	background: #0c0c0c;
+	border: none;
+	border-bottom: 1px solid #2a2a2a;
+	box-sizing: content-box;
+	color: #fff;
+	display: flex;
+	height: 14px;
+	padding: 3px;
+	width: 14px;
+}
+.react-flow__controls .react-flow__controls-button:last-child {
+	border-bottom: none;
+}
+.react-flow__controls .react-flow__controls-button:hover {
+	background: #1a1a1a;
+}
+.react-flow__controls .react-flow__controls-button svg {
+	height: 12px;
+	width: 12px;
+	fill: currentColor;
+}
+.react-flow__controls .react-flow__controls-button.disabled svg {
+	fill: #4a4a4a;
 }

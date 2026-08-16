@@ -46,6 +46,7 @@ pub fn run() {
             commands::disassemble,
             commands::function_at,
             commands::function_disasm,
+            commands::function_graph,
             commands::strings,
             commands::imports,
             commands::xrefs_to,

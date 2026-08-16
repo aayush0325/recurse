@@ -119,6 +119,12 @@ pub fn function_disasm(addr: u64, state: State<'_, AppState>) -> Result<Value, S
 }
 
 #[tauri::command]
+pub fn function_graph(addr: u64, state: State<'_, AppState>) -> Result<Value, String> {
+    let guard = session(&state)?;
+    engine::function_graph(with_sess(&guard)?, addr)
+}
+
+#[tauri::command]
 pub fn strings(state: State<'_, AppState>) -> Result<Value, String> {
     let guard = session(&state)?;
     let v = engine::strings(with_sess(&guard)?)?;
