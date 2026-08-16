@@ -15,9 +15,9 @@ use agent::{Agent, LlmConfig, ModelInfo};
 
 /// WebKitGTK registers a `GtkGestureZoom` on the web view under the data key
 /// `"wk-view-zoom-gesture"` that scales the whole page on trackpad pinch. Tauri
-/// exposes no setting to disable it (upstream limitation), so we destroy that
-/// gesture's signal handlers. The app keeps its own Ctrl+/−/0 keyboard zoom and
-/// React Flow still handles pinch-zoom inside the graph (its own JS zoom).
+/// exposes no setting to disable it (upstream limitation) and JS/CSS cannot
+/// cancel it, so we destroy that gesture's signal handlers. The app keeps its
+/// own Ctrl+/−/0 keyboard zoom via the `set_zoom` command.
 #[cfg(target_os = "linux")]
 fn disable_pinch_zoom(app: &tauri::App) {
     use glib::prelude::ObjectExt;
