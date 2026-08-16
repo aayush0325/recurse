@@ -13,6 +13,36 @@ use std::sync::{Arc, Mutex};
 
 use agent::{Agent, LlmConfig, ModelInfo};
 
+/// WebKitGTK registers a `GtkGestureZoom` on the web view under the data key
+/// `"wk-view-zoom-gesture"` that scales the whole page on trackpad pinch. Tauri
+/// exposes no setting to disable it (upstream limitation), so we destroy that
+/// gesture's signal handlers. The app keeps its own Ctrl+/−/0 keyboard zoom and
+/// React Flow still handles pinch-zoom inside the graph (its own JS zoom).
+#[cfg(target_os = "linux")]
+fn disable_pinch_zoom(app: &tauri::App) {
+    use glib::prelude::ObjectExt;
+    use tauri::Manager;
+
+    let Some(webview) = app.get_webview_window("main") else {
+        eprintln!("[recurse] no main webview; skipping pinch-zoom disable");
+        return;
+    };
+    let _ = webview.with_webview(|wv| unsafe {
+        let inner = wv.inner();
+        if let Some(gesture) = inner.data::<()>("wk-view-zoom-gesture") {
+            glib::gobject_ffi::g_signal_handlers_destroy(
+                gesture.as_ptr() as *mut glib::gobject_ffi::GObject,
+            );
+            eprintln!("[recurse] disabled WebKitGTK pinch-zoom gesture");
+        } else {
+            eprintln!("[recurse] wk-view-zoom-gesture not found");
+        }
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn disable_pinch_zoom(_app: &tauri::App) {}
+
 pub struct AppState {
     pub session: Arc<Mutex<Option<session::R2Session>>>,
     pub debug: Arc<Mutex<Option<session::R2Session>>>,
@@ -28,6 +58,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            disable_pinch_zoom(app);
+            Ok(())
+        })
         .manage(AppState {
             session: Arc::new(Mutex::new(None)),
             debug: Arc::new(Mutex::new(None)),

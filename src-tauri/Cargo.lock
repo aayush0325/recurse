@@ -2811,6 +2811,7 @@ name = "recurse"
 version = "0.1.0"
 dependencies = [
  "dirs",
+ "glib",
  "portable-pty",
  "r2pipe",
  "serde",
@@ -2820,6 +2821,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "ureq",
+ "webkit2gtk",
 ]
 
 [[package]]
