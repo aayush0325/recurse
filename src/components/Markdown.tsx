@@ -8,8 +8,7 @@ type CodeProps = ComponentProps<"code"> & { node?: unknown };
 
 function Code({ node: _node, className, children, ...props }: CodeProps) {
 	const text = String(children ?? "");
-	const isBlock =
-		/^language-/.test(className ?? "") || text.includes("\n");
+	const isBlock = /^language-/.test(className ?? "") || text.includes("\n");
 	if (isBlock) {
 		return (
 			<code className={cn("font-mono text-[11px]", className)} {...props}>
@@ -19,7 +18,7 @@ function Code({ node: _node, className, children, ...props }: CodeProps) {
 	}
 	return (
 		<code
-			className="bg-muted font-mono text-[11px] rounded px-1 py-0.5"
+			className="bg-muted rounded px-1 py-0.5 font-mono text-[11px]"
 			{...props}
 		>
 			{children}
@@ -70,7 +69,12 @@ const components = {
 	),
 	code: Code,
 	a: (p: ComponentProps<"a">) => (
-		<a className="text-primary underline" target="_blank" rel="noreferrer" {...p} />
+		<a
+			className="text-primary underline"
+			target="_blank"
+			rel="noreferrer"
+			{...p}
+		/>
 	),
 	hr: () => <hr className="border-border my-2" />,
 	table: (p: ComponentProps<"table">) => (

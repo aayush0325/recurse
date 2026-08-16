@@ -223,12 +223,34 @@ pub fn fetch_models() -> Result<Vec<ModelInfo>, String> {
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AgentEvent {
-    Reasoning { run_id: String, delta: String },
-    Token { run_id: String, delta: String },
-    ToolCall { run_id: String, id: String, name: String, arguments: String },
-    ToolResult { run_id: String, id: String, name: String, result: String },
-    Done { run_id: String, content: String },
-    Error { run_id: String, message: String },
+    Reasoning {
+        run_id: String,
+        delta: String,
+    },
+    Token {
+        run_id: String,
+        delta: String,
+    },
+    ToolCall {
+        run_id: String,
+        id: String,
+        name: String,
+        arguments: String,
+    },
+    ToolResult {
+        run_id: String,
+        id: String,
+        name: String,
+        result: String,
+    },
+    Done {
+        run_id: String,
+        content: String,
+    },
+    Error {
+        run_id: String,
+        message: String,
+    },
 }
 
 /// Accumulates streamed tool-call fragments (OpenAI streams `tool_calls` as
@@ -516,11 +538,7 @@ impl Agent {
 
         for _ in 0..MAX_TOOL_ITERATIONS {
             let mut full = vec![ChatMessage::system(&system)];
-            full.extend(
-                self.messages
-                    .iter()
-                    .map(ChatMessage::without_reasoning),
-            );
+            full.extend(self.messages.iter().map(ChatMessage::without_reasoning));
 
             let outcome = stream_http(run_id, config, &full, tools, emit)?;
 
@@ -605,10 +623,7 @@ mod tests {
                         if l.is_empty() {
                             break;
                         }
-                        if let Some(v) = l
-                            .to_ascii_lowercase()
-                            .strip_prefix("content-length:")
-                        {
+                        if let Some(v) = l.to_ascii_lowercase().strip_prefix("content-length:") {
                             content_length = v.trim().parse().unwrap_or(0);
                         }
                     }
@@ -694,9 +709,7 @@ mod tests {
         let mut agent = Agent::new();
         let info = serde_json::json!({"bin":{"arch":"x86","bits":64,"type":"elf"}});
         let mut events: Vec<AgentEvent> = Vec::new();
-        let mut exec = |_tc: &ToolCall| -> Result<String, String> {
-            Ok("rip=0x1234".into())
-        };
+        let mut exec = |_tc: &ToolCall| -> Result<String, String> { Ok("rip=0x1234".into()) };
         let mut emit = |ev: AgentEvent| events.push(ev);
         let res = agent.run(
             "run-1",
@@ -734,21 +747,22 @@ mod tests {
             content_body("registers dumped."),
         ]);
         assert!(res.is_ok(), "run failed: {res:?}");
-        assert!(events.iter().any(
-            |e| matches!(e, AgentEvent::ToolCall { name, .. } if name == "debug_registers")
-        ));
-        assert!(events.iter().any(
-            |e| matches!(e, AgentEvent::ToolResult { result, .. } if result == "rip=0x1234")
-        ));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::ToolCall { name, .. } if name == "debug_registers")));
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::ToolResult { result, .. } if result == "rip=0x1234")));
         assert!(events.iter().any(|e| matches!(e, AgentEvent::Done { .. })));
         assert_eq!(content[0], "registers dumped.");
     }
 
     #[test]
     fn reasoning_is_streamed_and_persisted() {
-        let (res, events, _, messages) = run_with(vec![
-            reasoned_body("Answer.", "Let me think about this carefully."),
-        ]);
+        let (res, events, _, messages) = run_with(vec![reasoned_body(
+            "Answer.",
+            "Let me think about this carefully.",
+        )]);
         assert!(res.is_ok(), "run failed: {res:?}");
         assert!(events.iter().any(
             |e| matches!(e, AgentEvent::Reasoning { delta, .. } if delta == "Let me think about this carefully.")

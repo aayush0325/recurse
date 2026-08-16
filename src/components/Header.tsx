@@ -64,12 +64,8 @@ export function Header() {
 					<Badge variant="secondary">
 						{bin?.bits ? `${bin.bits}bit` : "?"}
 					</Badge>
-					<Badge variant="secondary">
-						{funcs.length} funcs
-					</Badge>
-					<Badge variant="secondary">
-						{strings.length} strings
-					</Badge>
+					<Badge variant="secondary">{funcs.length} funcs</Badge>
+					<Badge variant="secondary">{strings.length} strings</Badge>
 				</div>
 			)}
 
@@ -96,18 +92,12 @@ export function Header() {
 				)}
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							size="icon"
-							title="Settings"
-						>
+						<Button variant="ghost" size="icon" title="Settings">
 							<Settings />
 						</Button>
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end">
-						<DropdownMenuLabel>
-							Zoom · {zoomPct}%
-						</DropdownMenuLabel>
+						<DropdownMenuLabel>Zoom · {zoomPct}%</DropdownMenuLabel>
 						<DropdownMenuItem onClick={zoomIn}>
 							Zoom in (Ctrl +)
 						</DropdownMenuItem>

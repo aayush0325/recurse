@@ -3,6 +3,7 @@ import {
 	lazy,
 	Suspense,
 	useLayoutEffect,
+	useMemo,
 	useRef,
 	useState,
 	type ReactNode,
@@ -11,10 +12,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { callTarget } from "@/lib/calls";
 import { useAnalysisStore } from "@/store/analysisStore";
 import { useContextStore } from "@/store/contextStore";
 import { useUiStore } from "@/store/uiStore";
-import type { CenterTab, DecompileAnnotation } from "@/types";
+import type { CenterTab, DecompileAnnotation, Function } from "@/types";
 
 const ShellPanel = lazy(() =>
 	import("@/components/ShellPanel").then((m) => ({ default: m.ShellPanel })),
@@ -77,6 +79,8 @@ function highlight(
 
 function OpRow({
 	op,
+	target,
+	onGoTo,
 }: {
 	op: {
 		addr: number;
@@ -86,17 +90,37 @@ function OpRow({
 		jump?: number | null;
 		ptr?: number | null;
 	};
+	target?: Function | null;
+	onGoTo?: (f: Function) => void;
 }) {
 	const text = op.text ?? op.disasm ?? "";
+	const clickable = !!target;
 	return (
-		<div className="hover:bg-accent flex gap-3 px-3 py-px whitespace-nowrap">
+		<div
+			className={cn(
+				"flex gap-3 px-3 py-px whitespace-nowrap",
+				clickable && "hover:bg-accent/70 cursor-pointer",
+			)}
+			onClick={clickable && onGoTo ? () => onGoTo(target) : undefined}
+			title={
+				clickable
+					? `Go to ${target.name ?? fmtAddr(target.addr)}`
+					: undefined
+			}
+		>
 			<span className="text-primary w-[9ch] shrink-0">
 				{fmtAddr(op.addr)}
 			</span>
 			<span className="text-muted-foreground w-[16ch] shrink-0 overflow-hidden">
 				{op.bytes ?? ""}
 			</span>
-			<span className="text-foreground">
+			<span
+				className={cn(
+					"text-foreground",
+					clickable &&
+						"text-primary underline decoration-dotted underline-offset-2",
+				)}
+			>
 				{text}
 				{typeof op.jump === "number" && (
 					<span className="text-amber-500 dark:text-yellow-600">
@@ -119,6 +143,8 @@ export function CenterPanel() {
 	const tab = useUiStore((s) => s.tab);
 	const setTab = useUiStore((s) => s.setTab);
 	const selected = useAnalysisStore((s) => s.selected);
+	const funcs = useAnalysisStore((s) => s.funcs);
+	const selectFn = useAnalysisStore((s) => s.selectFn);
 	const asm = useAnalysisStore((s) => s.asm);
 	const asmLoading = useAnalysisStore((s) => s.asmLoading);
 	const strings = useAnalysisStore((s) => s.strings);
@@ -145,6 +171,15 @@ export function CenterPanel() {
 	const [debugMounted, setDebugMounted] = useState(false);
 	const [viewMode, setViewMode] = useState<"linear" | "graph">("linear");
 
+	// Address → function lookup so call instructions can resolve to their target.
+	const funcByAddr = useMemo(() => {
+		const m = new Map<number, Function>();
+		for (const f of funcs) {
+			if (typeof f.addr === "number") m.set(f.addr, f);
+		}
+		return m;
+	}, [funcs]);
+
 	// Mount (and keep mounted) the shell panel the first time the Shell tab is
 	// opened, so its terminals survive tab switches. Adjusting state during
 	// render is the documented React pattern here (guarded, no effect).
@@ -167,8 +202,7 @@ export function CenterPanel() {
 			}
 			const anchor = sel?.anchorNode;
 			const inView =
-				anchor instanceof Node &&
-				scrollRef.current?.contains(anchor);
+				anchor instanceof Node && scrollRef.current?.contains(anchor);
 			if (!inView) {
 				setPending(null);
 				return;
@@ -278,144 +312,170 @@ export function CenterPanel() {
 							ref={scrollRef}
 							onMouseUp={handleSelection}
 							className="scroll-host relative min-h-0 min-w-0 flex-1 overflow-auto"
-				>
-					{pending && (
-						<div className="absolute top-2 right-2 z-20 flex items-center gap-1">
-							<Button
-								size="sm"
-								onClick={commitPending}
-								className="shadow"
-								title="Add selection to agent context (Ctrl+L)"
-							>
-								+ Add to agent context
-							</Button>
-							<Button
-								variant="ghost"
-								size="icon"
-								className="shadow"
-								onClick={() => setPending(null)}
-								title="Dismiss"
-							>
-								<X className="h-3.5 w-3.5" />
-							</Button>
-						</div>
-					)}
-					{tab === "disasm" && (
-						<>
-							{selected && (
-								<div className="border-border bg-card sticky top-0 z-10 flex items-baseline gap-3 border-b px-3 py-1.5">
-									<span className="font-semibold">
-										{selected.name ??
-											selected.signature ??
-											"unknown"}
-									</span>
-									<span className="text-muted-foreground font-mono text-[11px]">
-										{fmtAddr(selected.addr)} ·{" "}
-										{asm?.size ?? selected.size ?? "?"}{" "}
-										bytes
-									</span>
+						>
+							{pending && (
+								<div className="absolute top-2 right-2 z-20 flex items-center gap-1">
+									<Button
+										size="sm"
+										onClick={commitPending}
+										className="shadow"
+										title="Add selection to agent context (Ctrl+L)"
+									>
+										+ Add to agent context
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon"
+										className="shadow"
+										onClick={() => setPending(null)}
+										title="Dismiss"
+									>
+										<X className="h-3.5 w-3.5" />
+									</Button>
 								</div>
 							)}
-							<div className="font-mono text-xs">
-								{asmLoading && (
-									<div className="text-muted-foreground px-3 py-3">
-										disassembling…
-									</div>
-								)}
-								{!selected && !asmLoading && (
-									<div className="text-muted-foreground px-3 py-3">
-										Select a function to disassemble it.
-									</div>
-								)}
-								{selected &&
-									!asmLoading &&
-									(!asm?.ops || asm.ops.length === 0) && (
-										<div className="text-muted-foreground px-3 py-3">
-											No instructions.
+							{tab === "disasm" && (
+								<>
+									{selected && (
+										<div className="border-border bg-card sticky top-0 z-10 flex items-baseline gap-3 border-b px-3 py-1.5">
+											<span className="font-semibold">
+												{selected.name ??
+													selected.signature ??
+													"unknown"}
+											</span>
+											<span className="text-muted-foreground font-mono text-[11px]">
+												{fmtAddr(selected.addr)} ·{" "}
+												{asm?.size ??
+													selected.size ??
+													"?"}{" "}
+												bytes
+											</span>
 										</div>
 									)}
-								{asm?.ops?.map((op) => (
-									<OpRow key={op.addr} op={op} />
-								))}
+									<div className="font-mono text-xs">
+										{asmLoading && (
+											<div className="text-muted-foreground px-3 py-3">
+												disassembling…
+											</div>
+										)}
+										{!selected && !asmLoading && (
+											<div className="text-muted-foreground px-3 py-3">
+												Select a function to disassemble
+												it.
+											</div>
+										)}
+										{selected &&
+											!asmLoading &&
+											(!asm?.ops ||
+												asm.ops.length === 0) && (
+												<div className="text-muted-foreground px-3 py-3">
+													No instructions.
+												</div>
+											)}
+										{asm?.ops?.map((op) => (
+											<OpRow
+												key={op.addr}
+												op={op}
+												target={callTarget(
+													op,
+													funcByAddr,
+												)}
+												onGoTo={selectFn}
+											/>
+										))}
+									</div>
+								</>
+							)}
+
+							{tab === "strings" && (
+								<table className="w-full font-mono text-xs">
+									<thead className="bg-card sticky top-0">
+										<tr className="text-muted-foreground text-left text-[11px]">
+											<th className="px-3 py-1.5">
+												Offset
+											</th>
+											<th className="px-3 py-1.5">
+												Type
+											</th>
+											<th className="px-3 py-1.5">
+												String
+											</th>
+										</tr>
+									</thead>
+									<tbody>
+										{strings.map((s) => (
+											<tr
+												key={`${s.vaddr}-${s.string}`}
+												className="hover:bg-accent"
+											>
+												<td className="text-primary px-3 py-px">
+													{fmtAddr(s.vaddr)}
+												</td>
+												<td className="px-3 py-px">
+													{s.type ?? ""}
+												</td>
+												<td
+													className="max-w-0 truncate px-3 py-px"
+													title={s.string}
+												>
+													{s.string}
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							)}
+
+							{tab === "imports" && (
+								<table className="w-full font-mono text-xs">
+									<thead className="bg-card sticky top-0">
+										<tr className="text-muted-foreground text-left text-[11px]">
+											<th className="px-3 py-1.5">
+												Import
+											</th>
+										</tr>
+									</thead>
+									<tbody>
+										{imports.map((imp, i) => (
+											<tr
+												key={i}
+												className="hover:bg-accent"
+											>
+												<td className="px-3 py-px">
+													{imp.name ?? "(unnamed)"}
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							)}
+						</div>
+
+						{tab === "disasm" && decompiled && (
+							<div className="border-border bg-card relative shrink-0 border-t">
+								<pre className="scroll-host text-primary h-64 overflow-auto px-3 py-2 font-mono text-xs">
+									{highlight(
+										decompiled,
+										decompiledAnnotations,
+									)}
+								</pre>
+								<Button
+									variant="ghost"
+									size="icon"
+									className="bg-card/80 absolute top-1 right-1 h-6 w-6"
+									onClick={clearDecompiled}
+									title="Close decompiled view"
+								>
+									<X className="h-3.5 w-3.5" />
+								</Button>
 							</div>
-						</>
-					)}
+						)}
 
-					{tab === "strings" && (
-						<table className="w-full font-mono text-xs">
-							<thead className="bg-card sticky top-0">
-								<tr className="text-muted-foreground text-left text-[11px]">
-									<th className="px-3 py-1.5">Offset</th>
-									<th className="px-3 py-1.5">Type</th>
-									<th className="px-3 py-1.5">String</th>
-								</tr>
-							</thead>
-							<tbody>
-								{strings.map((s) => (
-									<tr
-										key={`${s.vaddr}-${s.string}`}
-										className="hover:bg-accent"
-									>
-										<td className="text-primary px-3 py-px">
-											{fmtAddr(s.vaddr)}
-										</td>
-										<td className="px-3 py-px">
-											{s.type ?? ""}
-										</td>
-										<td
-											className="max-w-0 truncate px-3 py-px"
-											title={s.string}
-										>
-											{s.string}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					)}
-
-					{tab === "imports" && (
-						<table className="w-full font-mono text-xs">
-							<thead className="bg-card sticky top-0">
-								<tr className="text-muted-foreground text-left text-[11px]">
-									<th className="px-3 py-1.5">Import</th>
-								</tr>
-							</thead>
-							<tbody>
-								{imports.map((imp, i) => (
-									<tr key={i} className="hover:bg-accent">
-										<td className="px-3 py-px">
-											{imp.name ?? "(unnamed)"}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					)}
-				</div>
-
-				{tab === "disasm" && decompiled && (
-					<div className="border-border bg-card relative shrink-0 border-t">
-						<pre className="scroll-host text-primary h-64 overflow-auto px-3 py-2 font-mono text-xs">
-							{highlight(decompiled, decompiledAnnotations)}
-						</pre>
-						<Button
-							variant="ghost"
-							size="icon"
-							className="bg-card/80 absolute top-1 right-1 h-6 w-6"
-							onClick={clearDecompiled}
-							title="Close decompiled view"
-						>
-							<X className="h-3.5 w-3.5" />
-						</Button>
-					</div>
-				)}
-
-				{tab === "disasm" && decompileError && (
-					<div className="border-destructive bg-destructive/10 text-destructive m-3 rounded-md border p-2.5 font-mono text-[11px] whitespace-pre-wrap">
-						{decompileError}
-					</div>
-				)}
+						{tab === "disasm" && decompileError && (
+							<div className="border-destructive bg-destructive/10 text-destructive m-3 rounded-md border p-2.5 font-mono text-[11px] whitespace-pre-wrap">
+								{decompileError}
+							</div>
+						)}
 					</>
 				)}
 			</div>

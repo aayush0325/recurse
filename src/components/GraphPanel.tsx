@@ -17,7 +17,10 @@ import "@xyflow/react/dist/style.css";
 import dagre from "@dagrejs/dagre";
 
 import { api } from "@/api";
-import type { GraphOp, R2Graph } from "@/types";
+import { cn } from "@/lib/utils";
+import { callTarget } from "@/lib/calls";
+import { useAnalysisStore } from "@/store/analysisStore";
+import type { Function, GraphOp, R2Graph } from "@/types";
 
 const BLOCK_W = 380;
 const LINE_H = 17;
@@ -27,36 +30,71 @@ function fmtAddr(a?: number | null) {
 	return typeof a === "number" ? `0x${a.toString(16)}` : "";
 }
 
-type BlockData = { addr: string; ops: GraphOp[] };
+type BlockOp = GraphOp & { target?: Function | null };
+type BlockData = { addr: string; ops: BlockOp[] };
 type BlockNode = Node<BlockData, "cfgnode">;
 
 function BlockNodeComponent({ data }: NodeProps<BlockNode>) {
 	return (
 		<div className="border-border bg-card rounded border font-mono text-[10.5px] shadow-lg">
-			<Handle type="target" position={Position.Top} className="!opacity-0" />
-			<div className="text-muted-foreground border-border flex items-center gap-2 border-b bg-secondary/30 px-1.5 text-[9px]">
+			<Handle
+				type="target"
+				position={Position.Top}
+				className="!opacity-0"
+			/>
+			<div className="text-muted-foreground border-border bg-secondary/30 flex items-center gap-2 border-b px-1.5 text-[9px]">
 				<span className="text-primary font-semibold">{data.addr}</span>
 				<span className="ml-auto">{data.ops.length} insn</span>
 			</div>
 			<div className="py-0.5">
-				{data.ops.map((op, i) => (
-					<div
-						key={i}
-						className="flex gap-1.5 px-1.5 leading-[17px] whitespace-nowrap"
-					>
-						<span className="text-primary w-[60px] shrink-0">
-							{fmtAddr(op.addr)}
-						</span>
-						<span className="text-muted-foreground w-[90px] shrink-0 truncate">
-							{op.bytes ?? ""}
-						</span>
-						<span className="text-foreground truncate">
-							{op.disasm ?? ""}
-						</span>
-					</div>
-				))}
+				{data.ops.map((op, i) => {
+					const clickable = !!op.target;
+					return (
+						<div
+							key={i}
+							className={cn(
+								"flex gap-1.5 px-1.5 leading-[17px] whitespace-nowrap",
+								clickable &&
+									"hover:bg-accent/70 cursor-pointer",
+							)}
+							onClick={
+								clickable && op.target
+									? () =>
+											useAnalysisStore
+												.getState()
+												.selectFn(op.target as Function)
+									: undefined
+							}
+							title={
+								clickable && op.target
+									? `Go to ${op.target.name ?? fmtAddr(op.target.addr)}`
+									: undefined
+							}
+						>
+							<span className="text-primary w-[60px] shrink-0">
+								{fmtAddr(op.addr)}
+							</span>
+							<span className="text-muted-foreground w-[90px] shrink-0 truncate">
+								{op.bytes ?? ""}
+							</span>
+							<span
+								className={cn(
+									"text-foreground truncate",
+									clickable &&
+										"text-primary underline decoration-dotted underline-offset-2",
+								)}
+							>
+								{op.disasm ?? ""}
+							</span>
+						</div>
+					);
+				})}
 			</div>
-			<Handle type="source" position={Position.Bottom} className="!opacity-0" />
+			<Handle
+				type="source"
+				position={Position.Bottom}
+				className="!opacity-0"
+			/>
 		</div>
 	);
 }
@@ -74,15 +112,23 @@ function makeEdge(src: string, dst: number, label: string | undefined): Edge {
 		type: "smoothstep",
 		label,
 		style: { stroke: color, strokeWidth: conditional ? 1.6 : 1.2 },
-		labelStyle: conditional ? { fill: color, fontSize: 11, fontWeight: 700 } : undefined,
+		labelStyle: conditional
+			? { fill: color, fontSize: 11, fontWeight: 700 }
+			: undefined,
 		markerEnd: { type: MarkerType.ArrowClosed, color },
 	};
 }
 
-function toGraph(graph: R2Graph): { nodes: BlockNode[]; edges: Edge[] } {
+function toGraph(
+	graph: R2Graph,
+	byAddr: Map<number, Function>,
+): { nodes: BlockNode[]; edges: Edge[] } {
 	const blocks = graph.blocks ?? [];
 	const nodes: BlockNode[] = blocks.map((b) => {
-		const ops = b.ops ?? [];
+		const ops: BlockOp[] = (b.ops ?? []).map((op) => ({
+			...op,
+			target: callTarget(op, byAddr),
+		}));
 		return {
 			id: String(b.addr),
 			type: "cfgnode",
@@ -135,11 +181,15 @@ function GraphCanvas({ addr }: { addr: number }) {
 	const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 	const [loading, setLoading] = useState(true);
 	const [err, setErr] = useState<string | null>(null);
+	const funcs = useAnalysisStore((s) => s.funcs);
 
 	useEffect(() => {
 		let cancelled = false;
-		api
-			.functionGraph(addr)
+		const byAddr = new Map<number, Function>();
+		for (const f of funcs) {
+			if (typeof f.addr === "number") byAddr.set(f.addr, f);
+		}
+		api.functionGraph(addr)
 			.then((arr) => {
 				if (cancelled) return;
 				const g = arr?.[0];
@@ -148,7 +198,7 @@ function GraphCanvas({ addr }: { addr: number }) {
 					setLoading(false);
 					return;
 				}
-				const { nodes: ns, edges: es } = toGraph(g);
+				const { nodes: ns, edges: es } = toGraph(g, byAddr);
 				setNodes(layout(ns, es));
 				setEdges(es);
 				setLoading(false);
@@ -162,7 +212,7 @@ function GraphCanvas({ addr }: { addr: number }) {
 		return () => {
 			cancelled = true;
 		};
-	}, [addr, setNodes, setEdges]);
+	}, [addr, setNodes, setEdges, funcs]);
 
 	return (
 		<div className="h-full w-full">

@@ -2,11 +2,7 @@ import { useState } from "react";
 import { ArrowRight, Binary } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-	Dialog,
-	DialogContent,
-	DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { pickBinary } from "@/api";
 import { useProjectStore } from "@/store/projectStore";
@@ -58,7 +54,9 @@ export function NewProjectDialog() {
 						<span className="text-primary text-xl leading-none">
 							◈
 						</span>
-						<DialogTitle className="text-lg">New project</DialogTitle>
+						<DialogTitle className="text-lg">
+							New project
+						</DialogTitle>
 					</div>
 					<p className="text-muted-foreground mt-1.5 text-xs leading-relaxed">
 						A workspace for one target binary. Everything lives in{" "}
@@ -77,7 +75,7 @@ export function NewProjectDialog() {
 							"group flex w-full items-center gap-3 rounded-lg border p-4 text-left transition-colors",
 							binaryPath
 								? "border-border bg-card hover:bg-accent"
-								: "border-border hover:border-primary bg-card/50 border-dashed hover:bg-accent",
+								: "border-border hover:border-primary bg-card/50 hover:bg-accent border-dashed",
 						)}
 					>
 						<Binary
@@ -115,7 +113,7 @@ export function NewProjectDialog() {
 							Project name
 						</label>
 						<div className="border-border bg-card focus-within:border-primary mt-1.5 flex items-center overflow-hidden rounded-md border font-mono text-sm transition-colors">
-							<span className="text-muted-foreground border-border border-r bg-background px-3 py-2 text-xs">
+							<span className="text-muted-foreground border-border bg-background border-r px-3 py-2 text-xs">
 								~/.recurse/
 							</span>
 							<input
@@ -138,7 +136,9 @@ export function NewProjectDialog() {
 						size="lg"
 						className="w-full"
 						onClick={create}
-						disabled={creating || !name.trim() || !binaryPath.trim()}
+						disabled={
+							creating || !name.trim() || !binaryPath.trim()
+						}
 					>
 						{creating ? "Creating…" : "Create & Open"}
 						{!creating && <ArrowRight className="h-4 w-4" />}

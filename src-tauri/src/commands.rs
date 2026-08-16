@@ -227,19 +227,12 @@ pub async fn agent_chat(
                 };
                 guard
                     .run(
-                        "run",
-                        &config,
-                        &path,
-                        &info,
-                        &memory,
-                        &message,
-                        &tools,
-                        &mut exec,
+                        "run", &config, &path, &info, &memory, &message, &tools, &mut exec,
                         &mut emit,
                     )
                     .map(|_| guard.messages().to_vec())
-            }),
-        );
+            },
+        ));
 
         match outcome {
             Ok(Ok(messages)) => {
@@ -321,7 +314,9 @@ pub fn debug_command(cmd: String, state: State<'_, AppState>) -> Result<Value, S
         .debug
         .lock()
         .map_err(|e| format!("debug lock poisoned: {e}"))?;
-    let sess = debug.as_ref().ok_or_else(|| "debugger not started".to_string())?;
+    let sess = debug
+        .as_ref()
+        .ok_or_else(|| "debugger not started".to_string())?;
     sess.run(&cmd)
 }
 
@@ -344,7 +339,9 @@ pub fn debug_registers(state: State<'_, AppState>) -> Result<Value, String> {
         .debug
         .lock()
         .map_err(|e| format!("debug lock poisoned: {e}"))?;
-    let sess = debug.as_ref().ok_or_else(|| "debugger not started".to_string())?;
+    let sess = debug
+        .as_ref()
+        .ok_or_else(|| "debugger not started".to_string())?;
     debugger::registers(sess)
 }
 
@@ -354,7 +351,9 @@ pub fn debug_disassemble(count: u64, state: State<'_, AppState>) -> Result<Value
         .debug
         .lock()
         .map_err(|e| format!("debug lock poisoned: {e}"))?;
-    let sess = debug.as_ref().ok_or_else(|| "debugger not started".to_string())?;
+    let sess = debug
+        .as_ref()
+        .ok_or_else(|| "debugger not started".to_string())?;
     debugger::current_disasm(sess, count)
 }
 
@@ -364,7 +363,9 @@ pub fn debug_breakpoints(state: State<'_, AppState>) -> Result<Value, String> {
         .debug
         .lock()
         .map_err(|e| format!("debug lock poisoned: {e}"))?;
-    let sess = debug.as_ref().ok_or_else(|| "debugger not started".to_string())?;
+    let sess = debug
+        .as_ref()
+        .ok_or_else(|| "debugger not started".to_string())?;
     debugger::breakpoints(sess)
 }
 

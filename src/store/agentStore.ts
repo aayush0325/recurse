@@ -41,7 +41,14 @@ interface AgentState {
 function composeContext(items: ContextItem[]): string {
 	if (items.length === 0) return "";
 	const blocks = items.map(
-		(c) => "```context\n[" + c.source + " · " + c.label + "]\n" + c.text + "\n```",
+		(c) =>
+			"```context\n[" +
+			c.source +
+			" · " +
+			c.label +
+			"]\n" +
+			c.text +
+			"\n```",
 	);
 	return blocks.join("\n\n");
 }
@@ -74,7 +81,8 @@ function mapHistory(history: ChatMessage[]): UiMessage[] {
 		} else if (m.role === "assistant") {
 			const blocks: UiBlock[] = [];
 			const reasoning = m.reasoning ?? "";
-			if (reasoning.length > 0) blocks.push({ kind: "reasoning", text: reasoning });
+			if (reasoning.length > 0)
+				blocks.push({ kind: "reasoning", text: reasoning });
 			for (const tc of m.tool_calls ?? []) {
 				blocks.push({
 					kind: "tool_call",
@@ -107,7 +115,8 @@ function mapHistory(history: ChatMessage[]): UiMessage[] {
 				const msg = out[i];
 				if (msg.role !== "assistant") continue;
 				const idx = msg.blocks.findIndex(
-					(b) => b.kind === "tool_call" && b.call.id === m.tool_call_id,
+					(b) =>
+						b.kind === "tool_call" && b.call.id === m.tool_call_id,
 				);
 				if (idx >= 0) {
 					const block = msg.blocks[idx];
@@ -155,9 +164,15 @@ function appendText(
 function applyEvent(m: UiMessage, ev: AgentEvent): UiMessage {
 	switch (ev.kind) {
 		case "reasoning":
-			return { ...m, blocks: appendText(m.blocks, "reasoning", ev.delta ?? "") };
+			return {
+				...m,
+				blocks: appendText(m.blocks, "reasoning", ev.delta ?? ""),
+			};
 		case "token":
-			return { ...m, blocks: appendText(m.blocks, "content", ev.delta ?? "") };
+			return {
+				...m,
+				blocks: appendText(m.blocks, "content", ev.delta ?? ""),
+			};
 		case "tool_call":
 			return {
 				...m,
@@ -208,7 +223,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 	reload: async () => {
 		try {
 			const history = await api.agentHistory();
-			set({ messages: history?.length ? mapHistory(history) : [], busy: false });
+			set({
+				messages: history?.length ? mapHistory(history) : [],
+				busy: false,
+			});
 		} catch {
 			/* ignore */
 		}
@@ -249,7 +267,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 		const channel = new Channel<AgentEvent>();
 		channel.onmessage = (ev) => {
 			set((st) => {
-				const messages = updateLast(st.messages, (m) => applyEvent(m, ev));
+				const messages = updateLast(st.messages, (m) =>
+					applyEvent(m, ev),
+				);
 				const busy = ev.kind !== "done" && ev.kind !== "error";
 				return { messages, busy };
 			});

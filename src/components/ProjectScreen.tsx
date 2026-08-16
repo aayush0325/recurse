@@ -69,7 +69,7 @@ export function ProjectScreen() {
 							{projects.length}
 						</span>
 					</div>
-					<ul className="border-border bg-card mt-2 divide-y divide-border rounded-lg border">
+					<ul className="border-border bg-card divide-border mt-2 divide-y rounded-lg border">
 						{projects.map((p) => (
 							<li key={p.name} className="group">
 								<div className="flex items-center gap-1 px-1.5 py-1">

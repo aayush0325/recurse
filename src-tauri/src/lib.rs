@@ -31,7 +31,7 @@ fn disable_pinch_zoom(app: &tauri::App) {
         let inner = wv.inner();
         if let Some(gesture) = inner.data::<()>("wk-view-zoom-gesture") {
             glib::gobject_ffi::g_signal_handlers_destroy(
-                gesture.as_ptr() as *mut glib::gobject_ffi::GObject,
+                gesture.as_ptr() as *mut glib::gobject_ffi::GObject
             );
             eprintln!("[recurse] disabled WebKitGTK pinch-zoom gesture");
         } else {

@@ -1,10 +1,4 @@
-import {
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-	type RefObject,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
 	ArrowUpDown,
 	ChevronDown,
@@ -39,7 +33,11 @@ import {
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/components/Markdown";
 import { useLlmStore } from "@/store/llmStore";
-import { useAgentStore, type ToolCallUi, type UiBlock } from "@/store/agentStore";
+import {
+	useAgentStore,
+	type ToolCallUi,
+	type UiBlock,
+} from "@/store/agentStore";
 import { useContextStore } from "@/store/contextStore";
 import type { ModelInfo } from "@/types";
 
@@ -168,20 +166,23 @@ export function AgentChat({ inputRef }: Props) {
 								<div className="bg-primary text-primary-foreground max-w-[92%] rounded-lg px-2.5 py-2 text-xs leading-relaxed break-words whitespace-pre-wrap">
 									{m.blocks
 										.filter((b) => b.kind === "content")
-										.map((b) => (b.kind === "content" ? b.text : ""))
+										.map((b) =>
+											b.kind === "content" ? b.text : "",
+										)
 										.join("")}
-									{m.contextRefs && m.contextRefs.length > 0 && (
-										<div className="mt-1.5 flex flex-wrap gap-1">
-											{m.contextRefs.map((ref, i) => (
-												<span
-													key={i}
-													className="bg-primary-foreground/15 rounded px-1 py-px font-mono text-[10px]"
-												>
-													{ref}
-												</span>
-											))}
-										</div>
-									)}
+									{m.contextRefs &&
+										m.contextRefs.length > 0 && (
+											<div className="mt-1.5 flex flex-wrap gap-1">
+												{m.contextRefs.map((ref, i) => (
+													<span
+														key={i}
+														className="bg-primary-foreground/15 rounded px-1 py-px font-mono text-[10px]"
+													>
+														{ref}
+													</span>
+												))}
+											</div>
+										)}
 								</div>
 							</div>
 						) : (
@@ -207,7 +208,7 @@ export function AgentChat({ inputRef }: Props) {
 								{it.label}
 							</span>
 							<button
-								className="ml-1 hover:text-destructive"
+								className="hover:text-destructive ml-1"
 								onClick={() => removeItem(it.id)}
 								title="Remove from context"
 							>
@@ -253,7 +254,11 @@ function ReasoningBlock({ text }: { text: string }) {
 				className="flex items-center gap-1 text-[10px] tracking-wider uppercase"
 				onClick={() => setShow((s) => !s)}
 			>
-				{show ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+				{show ? (
+					<ChevronDown className="h-3 w-3" />
+				) : (
+					<ChevronRight className="h-3 w-3" />
+				)}
 				thinking
 			</button>
 			{show && (
@@ -278,7 +283,7 @@ function AssistantMessage({
 		(b) => b.kind !== "content" || b.text.length > 0,
 	);
 	return (
-		<div className="min-w-0 max-w-full text-xs leading-relaxed">
+		<div className="max-w-full min-w-0 text-xs leading-relaxed">
 			{blocks.map((b, i) => {
 				switch (b.kind) {
 					case "reasoning":
@@ -429,7 +434,9 @@ function ModelSelector() {
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="end">
-								<DropdownMenuLabel>Sort by price</DropdownMenuLabel>
+								<DropdownMenuLabel>
+									Sort by price
+								</DropdownMenuLabel>
 								<DropdownMenuItem
 									onClick={() => setSort("price-asc")}
 								>

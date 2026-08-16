@@ -195,8 +195,7 @@ export function DebugPanel() {
 							key={op.addr}
 							className={cn(
 								"flex gap-3 px-3 py-px whitespace-nowrap",
-								op.addr === pc &&
-									"bg-primary/20 text-primary",
+								op.addr === pc && "bg-primary/20 text-primary",
 							)}
 						>
 							<span className="w-[9ch] shrink-0">

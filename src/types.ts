@@ -125,12 +125,7 @@ export interface ChatMessage {
 }
 
 export type AgentEventKind =
-	| "reasoning"
-	| "token"
-	| "tool_call"
-	| "tool_result"
-	| "done"
-	| "error";
+	"reasoning" | "token" | "tool_call" | "tool_result" | "done" | "error";
 
 export interface AgentEvent {
 	kind: AgentEventKind;

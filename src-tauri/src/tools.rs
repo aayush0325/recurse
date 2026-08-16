@@ -51,60 +51,127 @@ fn props(entries: &[(&str, &str, &str, bool)]) -> Value {
 /// The full tool schema sent to the model.
 pub fn schema() -> Vec<Value> {
     vec![
-        tool("disassemble", "Disassemble `count` instructions at `addr`.", props(&[
-            ("addr", "integer", "Address to disassemble", true),
-            ("count", "integer", "Number of instructions (default 32)", false),
-        ])),
-        tool("decompile", "Decompile the function containing `addr` (r2ghidra).", props(&[
-            ("addr", "integer", "Address inside the function", true),
-        ])),
+        tool(
+            "disassemble",
+            "Disassemble `count` instructions at `addr`.",
+            props(&[
+                ("addr", "integer", "Address to disassemble", true),
+                (
+                    "count",
+                    "integer",
+                    "Number of instructions (default 32)",
+                    false,
+                ),
+            ]),
+        ),
+        tool(
+            "decompile",
+            "Decompile the function containing `addr` (r2ghidra).",
+            props(&[("addr", "integer", "Address inside the function", true)]),
+        ),
         tool("functions", "List all analyzed functions.", props(&[])),
-        tool("strings", "List all strings referenced in the binary.", props(&[])),
+        tool(
+            "strings",
+            "List all strings referenced in the binary.",
+            props(&[]),
+        ),
         tool("imports", "List imported symbols.", props(&[])),
-        tool("xrefs_to", "List cross-references pointing to `addr`.", props(&[
-            ("addr", "integer", "Target address", true),
-        ])),
-        tool("search", "Search strings for a substring (case-insensitive).", props(&[
-            ("pattern", "string", "Substring to find", true),
-        ])),
-        tool("debug_start", "Start (or restart) the program under the debugger, optionally with arguments.", props(&[
-            ("args", "array", "Program arguments", false),
-        ])),
-        tool("debug_breakpoint", "Set a breakpoint at `addr`.", props(&[
-            ("addr", "integer", "Breakpoint address", true),
-        ])),
+        tool(
+            "xrefs_to",
+            "List cross-references pointing to `addr`.",
+            props(&[("addr", "integer", "Target address", true)]),
+        ),
+        tool(
+            "search",
+            "Search strings for a substring (case-insensitive).",
+            props(&[("pattern", "string", "Substring to find", true)]),
+        ),
+        tool(
+            "debug_start",
+            "Start (or restart) the program under the debugger, optionally with arguments.",
+            props(&[("args", "array", "Program arguments", false)]),
+        ),
+        tool(
+            "debug_breakpoint",
+            "Set a breakpoint at `addr`.",
+            props(&[("addr", "integer", "Breakpoint address", true)]),
+        ),
         tool("debug_breakpoints", "List current breakpoints.", props(&[])),
-        tool("debug_continue", "Continue execution until breakpoint or exit.", props(&[])),
-        tool("debug_step", "Single-step into the next instruction.", props(&[])),
-        tool("debug_step_over", "Single-step over the next instruction.", props(&[])),
+        tool(
+            "debug_continue",
+            "Continue execution until breakpoint or exit.",
+            props(&[]),
+        ),
+        tool(
+            "debug_step",
+            "Single-step into the next instruction.",
+            props(&[]),
+        ),
+        tool(
+            "debug_step_over",
+            "Single-step over the next instruction.",
+            props(&[]),
+        ),
         tool("debug_registers", "Dump all registers.", props(&[])),
-        tool("debug_read_memory", "Read `len` bytes at `addr`.", props(&[
-            ("addr", "integer", "Address to read", true),
-            ("len", "integer", "Number of bytes (default 16)", false),
-        ])),
-        tool("debug_write_memory", "Write raw bytes (hex string) at `addr`.", props(&[
-            ("addr", "integer", "Address to write", true),
-            ("bytes", "string", "Hex bytes, e.g. \"9090\"", true),
-        ])),
-        tool("debug_write_register", "Set a register to a value.", props(&[
-            ("reg", "string", "Register name, e.g. \"pc\" or \"eax\"", true),
-            ("value", "integer", "Value to set", true),
-        ])),
-        tool("debug_disassemble", "Disassemble `count` instructions at the current program counter.", props(&[
-            ("count", "integer", "Number of instructions (default 16)", false),
-        ])),
+        tool(
+            "debug_read_memory",
+            "Read `len` bytes at `addr`.",
+            props(&[
+                ("addr", "integer", "Address to read", true),
+                ("len", "integer", "Number of bytes (default 16)", false),
+            ]),
+        ),
+        tool(
+            "debug_write_memory",
+            "Write raw bytes (hex string) at `addr`.",
+            props(&[
+                ("addr", "integer", "Address to write", true),
+                ("bytes", "string", "Hex bytes, e.g. \"9090\"", true),
+            ]),
+        ),
+        tool(
+            "debug_write_register",
+            "Set a register to a value.",
+            props(&[
+                (
+                    "reg",
+                    "string",
+                    "Register name, e.g. \"pc\" or \"eax\"",
+                    true,
+                ),
+                ("value", "integer", "Value to set", true),
+            ]),
+        ),
+        tool(
+            "debug_disassemble",
+            "Disassemble `count` instructions at the current program counter.",
+            props(&[(
+                "count",
+                "integer",
+                "Number of instructions (default 16)",
+                false,
+            )]),
+        ),
         tool("debug_kill", "Kill the debuggee.", props(&[])),
-        tool("save_memory", "Persist a finding to project memory under a key.", props(&[
-            ("key", "string", "Short key, e.g. \"password_check\"", true),
-            ("value", "string", "The finding to remember", true),
-        ])),
-        tool("load_memory", "Read a previously saved memory entry.", props(&[
-            ("key", "string", "Key to load", true),
-        ])),
+        tool(
+            "save_memory",
+            "Persist a finding to project memory under a key.",
+            props(&[
+                ("key", "string", "Short key, e.g. \"password_check\"", true),
+                ("value", "string", "The finding to remember", true),
+            ]),
+        ),
+        tool(
+            "load_memory",
+            "Read a previously saved memory entry.",
+            props(&[("key", "string", "Key to load", true)]),
+        ),
         tool("list_memory", "List saved memory keys.", props(&[])),
-        tool("delete_memory", "Delete a saved memory entry.", props(&[
-            ("key", "string", "Key to delete", true),
-        ])),
+        tool(
+            "delete_memory",
+            "Delete a saved memory entry.",
+            props(&[("key", "string", "Key to delete", true)]),
+        ),
     ]
 }
 
@@ -152,7 +219,9 @@ where
         .session
         .lock()
         .map_err(|e| format!("session lock poisoned: {e}"))?;
-    let sess = guard.as_ref().ok_or_else(|| "no binary loaded".to_string())?;
+    let sess = guard
+        .as_ref()
+        .ok_or_else(|| "no binary loaded".to_string())?;
     f(sess)
 }
 
@@ -164,7 +233,9 @@ where
         .debug
         .lock()
         .map_err(|e| format!("debug lock poisoned: {e}"))?;
-    let sess = guard.as_ref().ok_or_else(|| "debugger not started".to_string())?;
+    let sess = guard
+        .as_ref()
+        .ok_or_else(|| "debugger not started".to_string())?;
     f(sess)
 }
 
@@ -190,11 +261,8 @@ where
                 .clone()
         };
         *guard = Some(
-            crate::session::R2Session::open_with_args(
-                path,
-                crate::debugger::SPAWN_ARGS.to_vec(),
-            )
-            .map_err(|e| format!("failed to start debugger: {e}"))?,
+            crate::session::R2Session::open_with_args(path, crate::debugger::SPAWN_ARGS.to_vec())
+                .map_err(|e| format!("failed to start debugger: {e}"))?,
         );
     }
     let sess = guard.as_ref().unwrap();
@@ -249,11 +317,7 @@ pub fn execute(tc: &ToolCall, ctx: &ToolContext) -> Result<String, String> {
             let argv: Vec<&str> = args
                 .get("args")
                 .and_then(|v| v.as_array())
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|x| x.as_str())
-                        .collect::<Vec<&str>>()
-                })
+                .map(|a| a.iter().filter_map(|x| x.as_str()).collect::<Vec<&str>>())
                 .unwrap_or_default();
             with_debug_mut(ctx, |s| debugger::start(s, &argv))
         }

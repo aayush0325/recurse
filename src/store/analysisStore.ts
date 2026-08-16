@@ -118,7 +118,7 @@ export const useAnalysisStore = create<AnalysisState>((set, get) => ({
 			const code =
 				typeof out === "string"
 					? out
-					: out?.code ?? JSON.stringify(out, null, 2);
+					: (out?.code ?? JSON.stringify(out, null, 2));
 			const annotations =
 				typeof out === "string" ? [] : (out.annotations ?? []);
 			set({ decompiled: code, decompiledAnnotations: annotations });
