@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { api } from "../api";
 import type { Project } from "../types";
 import { useBinaryStore } from "./binaryStore";
+import { useSessionStore } from "./sessionStore";
 
 interface ProjectState {
 	projects: Project[];
@@ -56,6 +57,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 	close: async () => {
 		await useBinaryStore.getState().closeBinary();
 		set({ current: null });
+		useSessionStore.getState().reset();
 		await get().loadProjects();
 	},
 }));

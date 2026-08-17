@@ -3,14 +3,12 @@ import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { AgentChat } from "@/components/AgentChat";
 import { CenterPanel } from "@/components/CenterPanel";
-import { Console } from "@/components/Console";
 import { FunctionList } from "@/components/FunctionList";
 import { Header } from "@/components/Header";
 import { NewProjectDialog } from "@/components/NewProjectDialog";
 import { ProjectScreen } from "@/components/ProjectScreen";
 import { useBinaryStore } from "@/store/binaryStore";
 import { useLlmStore } from "@/store/llmStore";
-import { useAgentStore } from "@/store/agentStore";
 import { useContextStore } from "@/store/contextStore";
 import { useProjectStore } from "@/store/projectStore";
 import { useSettingsStore } from "@/store/settingsStore";
@@ -28,7 +26,6 @@ function App() {
 		useLlmStore.getState().init();
 		useSettingsStore.getState().initZoom();
 		useProjectStore.getState().loadProjects();
-		useAgentStore.getState().init();
 	}, []);
 
 	useEffect(() => {
@@ -110,7 +107,6 @@ function App() {
 				</div>
 			)}
 
-			<Console />
 			<NewProjectDialog />
 		</div>
 	);

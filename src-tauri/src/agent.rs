@@ -457,6 +457,71 @@ fn stream_http(
     })
 }
 
+/// One-shot, non-streaming chat completion (used to generate session titles).
+pub fn complete_http(
+    endpoint: &str,
+    api_key: &str,
+    model: &str,
+    messages: &[ChatMessage],
+) -> Result<String, String> {
+    let model = if model.is_empty() {
+        DEFAULT_MODEL
+    } else {
+        model
+    };
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+    });
+    let resp = ureq::post(endpoint)
+        .set("Authorization", &format!("Bearer {api_key}"))
+        .set("X-Title", "Recurse")
+        .send_json(&body)
+        .map_err(|e| map_http_error(e))?;
+    let value: Value = resp.into_json().map_err(|e| e.to_string())?;
+    value["choices"][0]["message"]["content"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "llm returned no content".into())
+}
+
+/// Generate a short, descriptive session title from the user's request (like
+/// ChatGPT). Falls back to a truncated version of the message when the LLM is
+/// unavailable.
+pub fn generate_title(config: &LlmConfig, user: &str) -> String {
+    let fallback = |u: &str| -> String {
+        let joined: String = u.split_whitespace().collect::<Vec<_>>().join(" ");
+        let t: String = joined.chars().take(48).collect();
+        if t.is_empty() {
+            "New session".to_string()
+        } else {
+            t
+        }
+    };
+    let Some(key) = config.api_key.as_ref().filter(|k| !k.is_empty()) else {
+        return fallback(user);
+    };
+    let messages = vec![
+        ChatMessage::system(
+            "You are a title generator for a binary reverse-engineering assistant. \
+             Given the user's request, write a short descriptive session title of at \
+             most 8 words. Reply with ONLY the title and no quotes or punctuation.",
+        ),
+        ChatMessage::user(user),
+    ];
+    match complete_http(&config.endpoint, key, &config.model, &messages) {
+        Ok(t) => {
+            let t = t.trim().trim_matches('"').trim();
+            if t.is_empty() {
+                fallback(user)
+            } else {
+                t.chars().take(64).collect()
+            }
+        }
+        Err(_) => fallback(user),
+    }
+}
+
 fn map_http_error(e: ureq::Error) -> String {
     match e {
         ureq::Error::Status(code, resp) => {

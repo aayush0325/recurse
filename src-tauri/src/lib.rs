@@ -6,6 +6,7 @@ mod engine;
 mod memory;
 mod project;
 mod session;
+mod sessions;
 mod shell;
 mod tools;
 
@@ -50,6 +51,7 @@ pub struct AppState {
     pub llm: Mutex<LlmConfig>,
     pub models: Mutex<Option<Vec<ModelInfo>>>,
     pub project: Mutex<Option<project::Project>>,
+    pub current_session: Mutex<Option<String>>,
     pub shell: shell::ShellManager,
 }
 
@@ -59,6 +61,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            sessions::cleanup_legacy();
             disable_pinch_zoom(app);
             Ok(())
         })
@@ -69,6 +72,7 @@ pub fn run() {
             llm: Mutex::new(LlmConfig::default()),
             models: Mutex::new(None),
             project: Mutex::new(None),
+            current_session: Mutex::new(None),
             shell: shell::ShellManager::new(),
         })
         .invoke_handler(tauri::generate_handler![
@@ -90,6 +94,11 @@ pub fn run() {
             commands::agent_chat,
             commands::agent_reset,
             commands::agent_history,
+            commands::sessions_list,
+            commands::sessions_create,
+            commands::sessions_select,
+            commands::sessions_delete,
+            commands::sessions_rename,
             commands::debug_start,
             commands::debug_command,
             commands::debug_stop,

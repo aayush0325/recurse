@@ -194,3 +194,11 @@ export interface R2Graph {
 	blocks?: GraphBlock[];
 	[k: string]: unknown;
 }
+
+export interface Session {
+	id: string;
+	name: string;
+	model: string;
+	created_at: number;
+	updated_at: number;
+}

@@ -103,31 +103,3 @@ pub fn summary(project: Option<&str>) -> String {
     }
     out
 }
-
-fn history_path(project: Option<&str>) -> Result<PathBuf, String> {
-    Ok(project::project_dir(effective_project(project))?
-        .join("history")
-        .join("chat.json"))
-}
-
-/// Persist the serialized conversation history for a project.
-pub fn save_history(project: Option<&str>, json: &str) -> Result<(), String> {
-    let path = history_path(project)?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    fs::write(&path, json).map_err(|e| e.to_string())
-}
-
-/// Load a previously persisted conversation history, if any.
-pub fn load_history(project: Option<&str>) -> Option<String> {
-    let path = history_path(project).ok()?;
-    fs::read_to_string(path).ok()
-}
-
-/// Remove a project's persisted conversation history.
-pub fn clear_history(project: Option<&str>) {
-    if let Ok(path) = history_path(project) {
-        let _ = fs::remove_file(path);
-    }
-}

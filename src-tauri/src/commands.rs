@@ -9,6 +9,7 @@ use crate::engine;
 use crate::memory;
 use crate::project::{self, Project};
 use crate::session::R2Session;
+use crate::sessions::{self, Session};
 use crate::tools::ToolContext;
 use crate::AppState;
 
@@ -36,9 +37,33 @@ fn current_project(state: &State<'_, AppState>) -> Result<Option<String>, String
         .map(|p| p.name.clone()))
 }
 
-fn persist_history(project: Option<&str>, messages: &[agent::ChatMessage]) {
+fn current_session_id(state: &State<'_, AppState>) -> Result<Option<String>, String> {
+    Ok(state
+        .current_session
+        .lock()
+        .map_err(|e| format!("current_session lock poisoned: {e}"))?
+        .clone())
+}
+
+fn persist_history(project: Option<&str>, session_id: &str, messages: &[agent::ChatMessage]) {
     if let Ok(json) = serde_json::to_string(messages) {
-        let _ = memory::save_history(project, &json);
+        let _ = sessions::save_history(project, session_id, &json);
+    }
+}
+
+/// If this is a brand-new session (still named "New session"), ask the model
+/// to title it from the first user message. Falls back to a truncated message.
+fn ensure_session_name(
+    project: Option<&str>,
+    session_id: &str,
+    config: &agent::LlmConfig,
+    message: &str,
+) {
+    if let Ok(s) = sessions::get(project, session_id) {
+        if s.name.is_empty() || s.name == "New session" {
+            let name = agent::generate_title(config, message);
+            let _ = sessions::set_name(project, session_id, &name);
+        }
     }
 }
 
@@ -53,7 +78,10 @@ pub fn open_binary(path: String, state: State<'_, AppState>) -> Result<Value, St
         summary["function_count"], summary["string_count"]
     );
     *guard = Some(sess);
-    restore_agent(&state)?;
+    *state
+        .current_session
+        .lock()
+        .map_err(|e| format!("current_session lock poisoned: {e}"))? = None;
     Ok(summary)
 }
 
@@ -80,6 +108,10 @@ pub fn close_binary(state: State<'_, AppState>) -> Result<(), String> {
         .project
         .lock()
         .map_err(|e| format!("project lock poisoned: {e}"))? = None;
+    *state
+        .current_session
+        .lock()
+        .map_err(|e| format!("current_session lock poisoned: {e}"))? = None;
     Ok(())
 }
 
@@ -172,12 +204,13 @@ pub fn set_zoom(scale: f64, window: tauri::WebviewWindow) -> Result<(), String> 
         .map_err(|e| format!("set_zoom failed: {e}"))
 }
 
-/// Start an agent turn. Returns immediately with a run id; progress streams
-/// over the `agent-event` channel. The worker thread owns the LLM streaming
-/// and tool loop so the UI (and r2 commands) never block.
+/// Start an agent turn in the given session. Returns immediately; progress
+/// streams over the `agent-event` channel. The blocking loop (LLM streaming +
+/// r2 tool calls) runs on the Tauri blocking pool.
 #[tauri::command]
 pub async fn agent_chat(
     message: String,
+    session_id: String,
     on_event: tauri::ipc::Channel<AgentEvent>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
@@ -200,11 +233,10 @@ pub async fn agent_chat(
     let session = state.session.clone();
     let debug = state.debug.clone();
     let project = current_project(&state)?;
-    let project_for_history = project.clone();
+    let project_storage = project.clone();
+    let config_storage = config.clone();
+    let sid = session_id.clone();
 
-    // The blocking agent loop (LLM streaming + r2 tool calls) runs on the
-    // Tauri blocking pool so it never blocks the IPC / main thread. Tokens
-    // stream back over the per-request channel.
     tauri::async_runtime::spawn_blocking(move || {
         let tools = crate::tools::schema();
         let memory = memory::summary(project.as_deref());
@@ -214,8 +246,7 @@ pub async fn agent_chat(
             project,
         };
 
-        // Wrapped so any panic still surfaces an Error event to the frontend
-        // (the chat would otherwise hang on the pending indicator forever).
+        // Wrapped so any panic still surfaces an Error event to the frontend.
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
             || -> Result<Vec<agent::ChatMessage>, String> {
                 let mut guard = agent
@@ -236,7 +267,7 @@ pub async fn agent_chat(
 
         match outcome {
             Ok(Ok(messages)) => {
-                persist_history(project_for_history.as_deref(), &messages);
+                persist_history(project_storage.as_deref(), &sid, &messages);
             }
             Ok(Err(e)) => {
                 let _ = on_event.send(AgentEvent::Error {
@@ -251,6 +282,11 @@ pub async fn agent_chat(
                 });
             }
         }
+
+        // Remember the model + bump the recency, and title a brand-new session.
+        let _ = sessions::set_model(project_storage.as_deref(), &sid, &config_storage.model);
+        let _ = sessions::touch(project_storage.as_deref(), &sid);
+        ensure_session_name(project_storage.as_deref(), &sid, &config_storage, &message);
     });
 
     Ok(())
@@ -258,35 +294,116 @@ pub async fn agent_chat(
 
 #[tauri::command]
 pub fn agent_reset(state: State<'_, AppState>) -> Result<(), String> {
-    let mut agent = state
-        .agent
-        .lock()
-        .map_err(|e| format!("agent lock poisoned: {e}"))?;
-    agent.reset();
+    {
+        let mut agent = state
+            .agent
+            .lock()
+            .map_err(|e| format!("agent lock poisoned: {e}"))?;
+        agent.reset();
+    }
     let project = current_project(&state)?;
-    memory::clear_history(project.as_deref());
+    if let Some(sid) = current_session_id(&state)? {
+        let _ = sessions::save_history(project.as_deref(), &sid, "[]");
+    }
     Ok(())
 }
 
-/// Load persisted conversation history into the agent (called on binary open)
-/// and return the restored messages.
+/// Restore the active session's persisted conversation into the agent and
+/// return the messages (used by the frontend to render on load / reload).
 #[tauri::command]
 pub fn agent_history(state: State<'_, AppState>) -> Result<Vec<agent::ChatMessage>, String> {
-    restore_agent(&state)
-}
-
-fn restore_agent(state: &State<'_, AppState>) -> Result<Vec<agent::ChatMessage>, String> {
-    let project = current_project(state)?;
+    let project = current_project(&state)?;
+    let sid = current_session_id(&state)?;
     let mut agent = state
         .agent
         .lock()
         .map_err(|e| format!("agent lock poisoned: {e}"))?;
-    if let Some(json) = memory::load_history(project.as_deref()) {
-        if let Ok(msgs) = serde_json::from_str::<Vec<agent::ChatMessage>>(&json) {
-            agent.load(msgs);
+    if let Some(sid) = sid {
+        if let Some(json) = sessions::load_history(project.as_deref(), &sid) {
+            if let Ok(msgs) = serde_json::from_str::<Vec<agent::ChatMessage>>(&json) {
+                agent.load(msgs.clone());
+                return Ok(msgs);
+            }
         }
     }
-    Ok(agent.messages().to_vec())
+    agent.reset();
+    Ok(vec![])
+}
+
+// ---------------------------------------------------------------------------
+// Sessions
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn sessions_list(project: String) -> Result<Vec<Session>, String> {
+    sessions::list(Some(&project))
+}
+
+/// Create a new session for the active project and make it current.
+#[tauri::command]
+pub fn sessions_create(state: State<'_, AppState>) -> Result<Session, String> {
+    let project = current_project(&state)?;
+    let model = state
+        .llm
+        .lock()
+        .map_err(|e| format!("llm lock poisoned: {e}"))?
+        .model
+        .clone();
+    let s = sessions::create(project.as_deref(), &model)?;
+    state
+        .agent
+        .lock()
+        .map_err(|e| format!("agent lock poisoned: {e}"))?
+        .reset();
+    *state
+        .current_session
+        .lock()
+        .map_err(|e| format!("current_session lock poisoned: {e}"))? = Some(s.id.clone());
+    Ok(s)
+}
+
+/// Switch to a session: load its history into the agent and restore its model.
+#[tauri::command]
+pub fn sessions_select(session_id: String, state: State<'_, AppState>) -> Result<Session, String> {
+    let project = current_project(&state)?;
+    let s = sessions::get(project.as_deref(), &session_id)?;
+    {
+        let mut agent = state
+            .agent
+            .lock()
+            .map_err(|e| format!("agent lock poisoned: {e}"))?;
+        match sessions::load_history(project.as_deref(), &session_id) {
+            Some(json) => match serde_json::from_str::<Vec<agent::ChatMessage>>(&json) {
+                Ok(msgs) => agent.load(msgs),
+                Err(_) => agent.reset(),
+            },
+            None => agent.reset(),
+        }
+    }
+    {
+        let mut llm = state
+            .llm
+            .lock()
+            .map_err(|e| format!("llm lock poisoned: {e}"))?;
+        if !s.model.is_empty() {
+            llm.model = s.model.clone();
+        }
+    }
+    *state
+        .current_session
+        .lock()
+        .map_err(|e| format!("current_session lock poisoned: {e}"))? = Some(s.id.clone());
+    Ok(s)
+}
+
+#[tauri::command]
+pub fn sessions_delete(project: String, session_id: String) -> Result<(), String> {
+    sessions::remove(Some(&project), &session_id)
+}
+
+#[tauri::command]
+pub fn sessions_rename(project: String, session_id: String, name: String) -> Result<(), String> {
+    sessions::set_name(Some(&project), &session_id, &name)
 }
 
 /// Start a debug session for the currently loaded binary (`r2 -d`).
@@ -459,7 +576,6 @@ pub fn create_project(
         .project
         .lock()
         .map_err(|e| format!("project lock poisoned: {e}"))? = Some(p.clone());
-    restore_agent(&state)?;
     Ok(p)
 }
 
@@ -471,7 +587,6 @@ pub fn open_project(name: String, state: State<'_, AppState>) -> Result<Project,
         .project
         .lock()
         .map_err(|e| format!("project lock poisoned: {e}"))? = Some(p.clone());
-    restore_agent(&state)?;
     Ok(p)
 }
 

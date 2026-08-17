@@ -17,6 +17,7 @@ import type {
 	R2Graph,
 	R2String,
 	Registers,
+	Session,
 	ShellInfo,
 	Xref,
 } from "./types";
@@ -47,10 +48,19 @@ export const api = {
 	decompile: (addr: number) => invoke<DecompileResult>("decompile", { addr }),
 	raw: (cmd: string) => invoke<unknown>("raw", { cmd }),
 	setZoom: (scale: number) => invoke<void>("set_zoom", { scale }),
-	agentChat: (message: string, onEvent: Channel<AgentEvent>) =>
-		invoke<void>("agent_chat", { message, onEvent }),
+	agentChat: (message: string, sessionId: string, onEvent: Channel<AgentEvent>) =>
+		invoke<void>("agent_chat", { message, sessionId, onEvent }),
 	agentReset: () => invoke<void>("agent_reset"),
 	agentHistory: () => invoke<ChatMessage[]>("agent_history"),
+	sessionsList: (project: string) =>
+		invoke<Session[]>("sessions_list", { project }),
+	sessionsCreate: () => invoke<Session>("sessions_create"),
+	sessionsSelect: (sessionId: string) =>
+		invoke<Session>("sessions_select", { sessionId }),
+	sessionsDelete: (project: string, sessionId: string) =>
+		invoke<void>("sessions_delete", { project, sessionId }),
+	sessionsRename: (project: string, sessionId: string, name: string) =>
+		invoke<void>("sessions_rename", { project, sessionId, name }),
 	debugStart: () => invoke<void>("debug_start"),
 	debugCommand: (cmd: string) => invoke<unknown>("debug_command", { cmd }),
 	debugStop: () => invoke<void>("debug_stop"),

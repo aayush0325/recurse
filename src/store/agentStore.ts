@@ -3,6 +3,7 @@ import { create } from "zustand";
 
 import { api } from "../api";
 import type { AgentEvent, ChatMessage, ContextItem } from "../types";
+import { useSessionStore } from "./sessionStore";
 
 export interface ToolCallUi {
 	id: string;
@@ -30,9 +31,15 @@ export interface UiMessage {
 interface AgentState {
 	messages: UiMessage[];
 	busy: boolean;
+	activeSessionId: string | null;
+	activeRunId: string | null;
 	init: () => Promise<void>;
 	reload: () => Promise<void>;
-	send: (text: string, context?: ContextItem[]) => Promise<void>;
+	send: (
+		text: string,
+		context?: ContextItem[],
+		sessionId?: string,
+	) => Promise<void>;
 	reset: () => Promise<void>;
 }
 
@@ -208,6 +215,8 @@ function applyEvent(m: UiMessage, ev: AgentEvent): UiMessage {
 export const useAgentStore = create<AgentState>((set, get) => ({
 	messages: [],
 	busy: false,
+	activeSessionId: null,
+	activeRunId: null,
 
 	init: async () => {
 		try {
@@ -221,6 +230,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 	},
 
 	reload: async () => {
+		set({ messages: [], busy: false });
 		try {
 			const history = await api.agentHistory();
 			set({
@@ -228,11 +238,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 				busy: false,
 			});
 		} catch {
-			/* ignore */
+			set({ messages: [], busy: false });
 		}
 	},
 
-	send: async (text: string, context?: ContextItem[]) => {
+	send: async (text: string, context?: ContextItem[], sessionId?: string) => {
 		const s = get();
 		if (s.busy || !text.trim()) return;
 
@@ -260,6 +270,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 				},
 			],
 			busy: true,
+			activeSessionId:
+				sessionId || useSessionStore.getState().current?.id || null,
+			activeRunId: null,
 		}));
 
 		// Each turn gets its own IPC channel; events stream back per-request so
@@ -267,16 +280,34 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 		const channel = new Channel<AgentEvent>();
 		channel.onmessage = (ev) => {
 			set((st) => {
+				if (
+					st.activeSessionId !==
+					(sessionId ||
+						useSessionStore.getState().current?.id ||
+						null)
+				) {
+					return st;
+				}
+				if (st.activeRunId && st.activeRunId !== ev.run_id) {
+					return st;
+				}
+				const activeRunId = st.activeRunId ?? ev.run_id;
 				const messages = updateLast(st.messages, (m) =>
 					applyEvent(m, ev),
 				);
 				const busy = ev.kind !== "done" && ev.kind !== "error";
-				return { messages, busy };
+				return {
+					messages,
+					busy,
+					activeRunId: busy ? activeRunId : null,
+				};
 			});
 		};
 
 		try {
-			await api.agentChat(payload, channel);
+			const sid =
+				sessionId || useSessionStore.getState().current?.id || "";
+			await api.agentChat(payload, sid, channel);
 		} catch (e) {
 			set((st) => ({
 				messages: updateLast(st.messages, (m) => ({
@@ -285,12 +316,18 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 					error: String(e),
 				})),
 				busy: false,
+				activeRunId: null,
 			}));
 		}
 	},
 
 	reset: async () => {
 		await api.agentReset();
-		set({ messages: [], busy: false });
+		set({
+			messages: [],
+			busy: false,
+			activeRunId: null,
+			activeSessionId: null,
+		});
 	},
 }));
