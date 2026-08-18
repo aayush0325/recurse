@@ -1,4 +1,4 @@
-import { RefreshCw, X } from "lucide-react";
+import { Link2, Loader2, RefreshCw, X } from "lucide-react";
 import {
 	lazy,
 	Suspense,
@@ -13,10 +13,11 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { callTarget } from "@/lib/calls";
+import { api } from "@/api";
 import { useAnalysisStore } from "@/store/analysisStore";
 import { useContextStore } from "@/store/contextStore";
 import { useUiStore } from "@/store/uiStore";
-import type { CenterTab, DecompileAnnotation, Function } from "@/types";
+import type { CenterTab, DecompileAnnotation, Function, Xref } from "@/types";
 
 const ShellPanel = lazy(() =>
 	import("@/components/ShellPanel").then((m) => ({ default: m.ShellPanel })),
@@ -170,6 +171,11 @@ export function CenterPanel() {
 	const [shellMounted, setShellMounted] = useState(false);
 	const [debugMounted, setDebugMounted] = useState(false);
 	const [viewMode, setViewMode] = useState<"linear" | "graph">("linear");
+	const [xrefs, setXrefs] = useState<Xref[]>([]);
+	const [xrefsAddress, setXrefsAddress] = useState<number | null>(null);
+	const [xrefsOpen, setXrefsOpen] = useState(false);
+	const [xrefsLoading, setXrefsLoading] = useState(false);
+	const [xrefsError, setXrefsError] = useState<string | null>(null);
 
 	// Address → function lookup so call instructions can resolve to their target.
 	const funcByAddr = useMemo(() => {
@@ -227,6 +233,54 @@ export function CenterPanel() {
 		scrollRef.current?.scrollTo({ top: 0 });
 	}, [selectedAddr]);
 
+	const loadXrefs = async () => {
+		if (!selected) return;
+		const addr = selected.addr;
+		setXrefsAddress(addr);
+		setXrefsLoading(true);
+		setXrefsError(null);
+		try {
+			const result = await api.xrefsTo(addr);
+			if (useAnalysisStore.getState().selected?.addr === addr) {
+				setXrefs(result ?? []);
+			}
+		} catch (e) {
+			if (useAnalysisStore.getState().selected?.addr === addr) {
+				setXrefsError(String(e));
+			}
+		} finally {
+			setXrefsLoading(false);
+		}
+	};
+
+	const toggleXrefs = () => {
+		if (xrefsOpen && xrefsAddress === selectedAddr) {
+			setXrefsOpen(false);
+			return;
+		}
+		setXrefsOpen(true);
+		void loadXrefs();
+	};
+
+	const currentXrefs = xrefsAddress === selectedAddr ? xrefs : [];
+	const currentXrefsError = xrefsAddress === selectedAddr ? xrefsError : null;
+	const currentXrefsLoading = xrefsAddress === selectedAddr && xrefsLoading;
+
+	const sourceFunction = (xref: Xref): Function | undefined => {
+		if (xref.fcn_name) {
+			const byName = funcs.find(
+				(f) => f.name === xref.fcn_name || f.realname === xref.fcn_name,
+			);
+			if (byName) return byName;
+		}
+		return funcs.find(
+			(f) =>
+				typeof f.size === "number" &&
+				xref.from >= f.addr &&
+				xref.from < f.addr + f.size,
+		);
+	};
+
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 flex-col">
 			<div className="border-border bg-card flex items-center gap-1 border-b px-1">
@@ -274,6 +328,16 @@ export function CenterPanel() {
 							disabled={decompiling || !selected}
 						>
 							{decompiling ? "Decompiling…" : "Decompile"}
+						</Button>
+						<Button
+							variant={xrefsOpen ? "secondary" : "ghost"}
+							size="sm"
+							onClick={toggleXrefs}
+							disabled={!selected}
+							title="Show incoming cross-references"
+						>
+							<Link2 className="mr-1 h-3.5 w-3.5" />
+							Xrefs
 						</Button>
 						<Button
 							variant="ghost"
@@ -352,6 +416,81 @@ export function CenterPanel() {
 											</span>
 										</div>
 									)}
+									{xrefsOpen &&
+										selected &&
+										xrefsAddress === selectedAddr && (
+											<div className="border-border bg-card mx-3 my-2 max-h-44 overflow-auto rounded-md border">
+												<div className="text-muted-foreground flex items-center justify-between px-2.5 py-1.5 text-[11px]">
+													<span>
+														Incoming references
+													</span>
+													<span>
+														{currentXrefs.length}
+													</span>
+												</div>
+												{currentXrefsLoading && (
+													<div className="text-muted-foreground flex items-center gap-1.5 px-2.5 py-2 text-xs">
+														<Loader2 className="h-3.5 w-3.5 animate-spin" />
+														Loading xrefs…
+													</div>
+												)}
+												{currentXrefsError && (
+													<div className="text-destructive px-2.5 py-2 text-xs">
+														{currentXrefsError}
+													</div>
+												)}
+												{!currentXrefsLoading &&
+													!currentXrefsError &&
+													currentXrefs.length ===
+														0 && (
+														<div className="text-muted-foreground px-2.5 py-2 text-xs">
+															No incoming
+															references.
+														</div>
+													)}
+												{currentXrefs.map((xref, i) => {
+													const source =
+														sourceFunction(xref);
+													return (
+														<button
+															key={`${xref.from}-${i}`}
+															type="button"
+															disabled={!source}
+															onClick={() =>
+																source &&
+																selectFn(source)
+															}
+															className={cn(
+																"hover:bg-accent flex w-full items-center gap-2 px-2.5 py-1.5 text-left font-mono text-[11px] disabled:cursor-default",
+																source &&
+																	"text-primary",
+															)}
+															title={
+																source
+																	? "Go to source function"
+																	: undefined
+															}
+														>
+															<span className="w-[9ch] shrink-0">
+																{fmtAddr(
+																	xref.from,
+																)}
+															</span>
+															<span className="min-w-0 flex-1 truncate">
+																{source?.name ??
+																	xref.fcn_name ??
+																	"unknown function"}
+															</span>
+															<span className="text-muted-foreground max-w-[45%] truncate">
+																{xref.opcode ??
+																	xref.type ??
+																	"reference"}
+															</span>
+														</button>
+													);
+												})}
+											</div>
+										)}
 									<div className="font-mono text-xs">
 										{asmLoading && (
 											<div className="text-muted-foreground px-3 py-3">
