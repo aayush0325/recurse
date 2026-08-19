@@ -1,3 +1,6 @@
+use std::fs::{self, File, OpenOptions};
+use std::process::Command;
+
 use serde_json::Value;
 
 use crate::session::R2Session;
@@ -5,7 +8,31 @@ use crate::session::R2Session;
 /// Typed wrappers over radare2's native debugger (`r2 -d`). These run against
 /// a dedicated debug session (a second `R2Session` spawned with `-d`) so the
 /// analysis session stays clean.
-pub const SPAWN_ARGS: &[&str] = &["-d", "-e", "bin.cache=true"];
+pub const DEBUG_PROFILE: &str = "/tmp/recurse-debug.rr2";
+pub const DEBUG_STDIN: &str = "/tmp/recurse-debug.stdin";
+pub const SPAWN_ARGS: &[&str] = &["-d", "-e", "bin.cache=true", "-r", DEBUG_PROFILE];
+
+/// Give the debuggee a persistent FIFO stdin so the UI can provide input while
+/// a continue command is waiting inside radare2.
+pub fn prepare_profile() -> Result<(), String> {
+    let _ = fs::remove_file(DEBUG_STDIN);
+    let status = Command::new("mkfifo")
+        .arg(DEBUG_STDIN)
+        .status()
+        .map_err(|e| format!("failed to create debugger stdin pipe: {e}"))?;
+    if !status.success() {
+        return Err("mkfifo failed for debugger stdin".to_string());
+    }
+    fs::write(DEBUG_PROFILE, format!("stdin={DEBUG_STDIN}\n")).map_err(|e| e.to_string())
+}
+
+pub fn open_stdin() -> Result<File, String> {
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(DEBUG_STDIN)
+        .map_err(|e| format!("failed to open debugger stdin: {e}"))
+}
 
 /// (Re)open the debuggee, optionally with program arguments.
 pub fn start(s: &R2Session, args: &[&str]) -> Result<Value, String> {

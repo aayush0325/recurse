@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
@@ -13,6 +15,7 @@ use crate::session::R2Session;
 pub struct ToolContext {
     pub session: Arc<Mutex<Option<R2Session>>>,
     pub debug: Arc<Mutex<Option<R2Session>>>,
+    pub debug_stdin: Arc<Mutex<Option<File>>>,
     pub project: Option<String>,
 }
 
@@ -111,6 +114,11 @@ pub fn schema() -> Vec<Value> {
             "debug_step_over",
             "Single-step over the next instruction.",
             props(&[]),
+        ),
+        tool(
+            "debug_stdin",
+            "Write a line to the debuggee stdin when it is waiting for input.",
+            props(&[("data", "string", "Input to send", true)]),
         ),
         tool("debug_registers", "Dump all registers.", props(&[])),
         tool(
@@ -260,10 +268,15 @@ where
                 .path
                 .clone()
         };
+        debugger::prepare_profile()?;
+        let stdin = debugger::open_stdin()?;
         *guard = Some(
             crate::session::R2Session::open_with_args(path, crate::debugger::SPAWN_ARGS.to_vec())
                 .map_err(|e| format!("failed to start debugger: {e}"))?,
         );
+        *ctx.debug_stdin
+            .lock()
+            .map_err(|e| format!("debug stdin lock poisoned: {e}"))? = Some(stdin);
     }
     let sess = guard.as_ref().unwrap();
     f(sess)
@@ -329,6 +342,21 @@ pub fn execute(tc: &ToolCall, ctx: &ToolContext) -> Result<String, String> {
         "debug_continue" => with_debug(ctx, debugger::continue_run),
         "debug_step" => with_debug(ctx, debugger::step),
         "debug_step_over" => with_debug(ctx, debugger::step_over),
+        "debug_stdin" => {
+            let data = get_str(&args, "data")?;
+            let mut stdin = ctx
+                .debug_stdin
+                .lock()
+                .map_err(|e| format!("debug stdin lock poisoned: {e}"))?;
+            let pipe = stdin
+                .as_mut()
+                .ok_or_else(|| "debugger stdin is not available".to_string())?;
+            pipe.write_all(format!("{data}\n").as_bytes())
+                .map_err(|e| format!("debugger stdin write failed: {e}"))?;
+            pipe.flush()
+                .map_err(|e| format!("debugger stdin flush failed: {e}"))?;
+            Ok(json!({ "written": true }))
+        }
         "debug_registers" => with_debug(ctx, debugger::registers),
         "debug_read_memory" => {
             let addr = get_u64(&args, "addr")?;

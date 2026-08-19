@@ -48,8 +48,11 @@ export const api = {
 	decompile: (addr: number) => invoke<DecompileResult>("decompile", { addr }),
 	raw: (cmd: string) => invoke<unknown>("raw", { cmd }),
 	setZoom: (scale: number) => invoke<void>("set_zoom", { scale }),
-	agentChat: (message: string, sessionId: string, onEvent: Channel<AgentEvent>) =>
-		invoke<void>("agent_chat", { message, sessionId, onEvent }),
+	agentChat: (
+		message: string,
+		sessionId: string,
+		onEvent: Channel<AgentEvent>,
+	) => invoke<void>("agent_chat", { message, sessionId, onEvent }),
 	agentReset: () => invoke<void>("agent_reset"),
 	agentHistory: () => invoke<ChatMessage[]>("agent_history"),
 	sessionsList: (project: string) =>
@@ -64,6 +67,7 @@ export const api = {
 	debugStart: () => invoke<void>("debug_start"),
 	debugCommand: (cmd: string) => invoke<unknown>("debug_command", { cmd }),
 	debugStop: () => invoke<void>("debug_stop"),
+	debugStdin: (data: string) => invoke<void>("debug_stdin", { data }),
 	debugRegisters: () => invoke<Registers>("debug_registers"),
 	debugDisassemble: (count: number) =>
 		invoke<DebugInsn[]>("debug_disassemble", { count }),

@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use serde::Serialize;
 use serde_json::Value;
 use tauri::State;
@@ -70,6 +72,21 @@ fn ensure_session_name(
 #[tauri::command]
 pub fn open_binary(path: String, state: State<'_, AppState>) -> Result<Value, String> {
     eprintln!("[recurse] open_binary: {path}");
+    {
+        let mut debug = state
+            .debug
+            .lock()
+            .map_err(|e| format!("debug lock poisoned: {e}"))?;
+        if let Some(sess) = debug.as_ref() {
+            let _ = debugger::kill(sess);
+        }
+        debug.take();
+    }
+    state
+        .debug_stdin
+        .lock()
+        .map_err(|e| format!("debug stdin lock poisoned: {e}"))?
+        .take();
     let mut guard = session(&state)?;
     let sess = R2Session::open(path)?;
     let summary = engine::summary(&sess);
@@ -101,8 +118,16 @@ pub fn close_binary(state: State<'_, AppState>) -> Result<(), String> {
             .debug
             .lock()
             .map_err(|e| format!("debug lock poisoned: {e}"))?;
+        if let Some(sess) = debug.as_ref() {
+            let _ = debugger::kill(sess);
+        }
         debug.take();
     }
+    state
+        .debug_stdin
+        .lock()
+        .map_err(|e| format!("debug stdin lock poisoned: {e}"))?
+        .take();
     session(&state)?.take();
     *state
         .project
@@ -232,6 +257,7 @@ pub async fn agent_chat(
     let agent = state.agent.clone();
     let session = state.session.clone();
     let debug = state.debug.clone();
+    let debug_stdin = state.debug_stdin.clone();
     let project = current_project(&state)?;
     let project_storage = project.clone();
     let config_storage = config.clone();
@@ -243,6 +269,7 @@ pub async fn agent_chat(
         let ctx = ToolContext {
             session,
             debug,
+            debug_stdin,
             project,
         };
 
@@ -409,36 +436,96 @@ pub fn sessions_rename(project: String, session_id: String, name: String) -> Res
 /// Start a debug session for the currently loaded binary (`r2 -d`).
 #[tauri::command]
 pub fn debug_start(state: State<'_, AppState>) -> Result<(), String> {
+    eprintln!("[recurse][debug] start requested");
     let path = {
         let guard = session(&state)?;
         with_sess(&guard)?.path.clone()
     };
+    eprintln!("[recurse][debug] target: {}", path.display());
     let mut debug = state
         .debug
         .lock()
         .map_err(|e| format!("debug lock poisoned: {e}"))?;
-    if debug.is_none() {
+    let stdin_ready = state
+        .debug_stdin
+        .lock()
+        .map_err(|e| format!("debug stdin lock poisoned: {e}"))?
+        .is_some();
+    if debug.is_none() || !stdin_ready {
+        if debug.is_some() {
+            eprintln!("[recurse][debug] replacing stale debug session");
+            if let Some(sess) = debug.as_ref() {
+                let _ = debugger::kill(sess);
+            }
+            debug.take();
+            state
+                .debug_stdin
+                .lock()
+                .map_err(|e| format!("debug stdin lock poisoned: {e}"))?
+                .take();
+        }
+        eprintln!("[recurse][debug] spawning r2 debug session");
+        debugger::prepare_profile()?;
+        eprintln!("[recurse][debug] stdin profile prepared");
+        let stdin = debugger::open_stdin()?;
+        eprintln!("[recurse][debug] stdin pipe opened");
         let sess = R2Session::open_with_args(path, debugger::SPAWN_ARGS.to_vec())?;
         *debug = Some(sess);
+        *state
+            .debug_stdin
+            .lock()
+            .map_err(|e| format!("debug stdin lock poisoned: {e}"))? = Some(stdin);
+        eprintln!("[recurse][debug] r2 debug session spawned");
     }
+    let sess = debug
+        .as_ref()
+        .ok_or_else(|| "failed to create debugger session".to_string())?;
+    eprintln!("[recurse][debug] reopening debuggee with ood");
+    debugger::start(sess, &[]).map_err(|e| {
+        eprintln!("[recurse][debug] ood failed: {e}");
+        e
+    })?;
+    eprintln!("[recurse][debug] start completed");
     Ok(())
 }
 
 /// Pass a raw r2 debugger command through to the debug session.
 #[tauri::command]
-pub fn debug_command(cmd: String, state: State<'_, AppState>) -> Result<Value, String> {
-    let debug = state
-        .debug
-        .lock()
-        .map_err(|e| format!("debug lock poisoned: {e}"))?;
-    let sess = debug
-        .as_ref()
-        .ok_or_else(|| "debugger not started".to_string())?;
-    sess.run(&cmd)
+pub async fn debug_command(cmd: String, state: State<'_, AppState>) -> Result<Value, String> {
+    eprintln!("[recurse][debug] command started: {cmd}");
+    let debug = state.debug.clone();
+    let command = cmd.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let debug = debug
+            .lock()
+            .map_err(|e| format!("debug lock poisoned: {e}"))?;
+        let sess = debug
+            .as_ref()
+            .ok_or_else(|| "debugger not started".to_string())?;
+        sess.run(&command)
+    })
+    .await
+    .map_err(|e| format!("debug command worker failed: {e}"))?;
+    match &result {
+        Ok(value) => eprintln!(
+            "[recurse][debug] command completed: {cmd} (json_type={})",
+            match value {
+                Value::Null => "null",
+                Value::Bool(_) => "bool",
+                Value::Number(_) => "number",
+                Value::String(_) => "text",
+                Value::Array(_) => "array",
+                Value::Object(_) => "object",
+            }
+        ),
+        Err(error) => eprintln!("[recurse][debug] command failed: {cmd}: {error}"),
+    }
+    result
 }
 
 #[tauri::command]
 pub fn debug_stop(state: State<'_, AppState>) -> Result<(), String> {
+    eprintln!("[recurse][debug] stop requested");
     let mut debug = state
         .debug
         .lock()
@@ -447,11 +534,34 @@ pub fn debug_stop(state: State<'_, AppState>) -> Result<(), String> {
         let _ = debugger::kill(sess);
     }
     debug.take();
+    state
+        .debug_stdin
+        .lock()
+        .map_err(|e| format!("debug stdin lock poisoned: {e}"))?
+        .take();
+    eprintln!("[recurse][debug] stopped");
     Ok(())
 }
 
 #[tauri::command]
+pub fn debug_stdin(data: String, state: State<'_, AppState>) -> Result<(), String> {
+    eprintln!("[recurse][debug] stdin write: {} bytes", data.len());
+    let mut stdin = state
+        .debug_stdin
+        .lock()
+        .map_err(|e| format!("debug stdin lock poisoned: {e}"))?;
+    let pipe = stdin
+        .as_mut()
+        .ok_or_else(|| "debugger stdin is not available".to_string())?;
+    pipe.write_all(data.as_bytes())
+        .map_err(|e| format!("debugger stdin write failed: {e}"))?;
+    pipe.flush()
+        .map_err(|e| format!("debugger stdin flush failed: {e}"))
+}
+
+#[tauri::command]
 pub fn debug_registers(state: State<'_, AppState>) -> Result<Value, String> {
+    eprintln!("[recurse][debug] registers requested");
     let debug = state
         .debug
         .lock()
@@ -464,6 +574,7 @@ pub fn debug_registers(state: State<'_, AppState>) -> Result<Value, String> {
 
 #[tauri::command]
 pub fn debug_disassemble(count: u64, state: State<'_, AppState>) -> Result<Value, String> {
+    eprintln!("[recurse][debug] disassemble requested: count={count}");
     let debug = state
         .debug
         .lock()
@@ -476,6 +587,7 @@ pub fn debug_disassemble(count: u64, state: State<'_, AppState>) -> Result<Value
 
 #[tauri::command]
 pub fn debug_breakpoints(state: State<'_, AppState>) -> Result<Value, String> {
+    eprintln!("[recurse][debug] breakpoints requested");
     let debug = state
         .debug
         .lock()

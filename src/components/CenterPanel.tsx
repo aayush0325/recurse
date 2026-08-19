@@ -357,7 +357,7 @@ export function CenterPanel() {
 			<div
 				className={cn(
 					"min-h-0 min-w-0 flex-1 flex-col",
-					tab === "shell" ? "hidden" : "flex",
+					tab === "shell" || tab === "debug" ? "hidden" : "flex",
 				)}
 			>
 				{tab === "disasm" && viewMode === "graph" && selected ? (

@@ -47,6 +47,7 @@ fn disable_pinch_zoom(_app: &tauri::App) {}
 pub struct AppState {
     pub session: Arc<Mutex<Option<session::R2Session>>>,
     pub debug: Arc<Mutex<Option<session::R2Session>>>,
+    pub debug_stdin: Arc<Mutex<Option<std::fs::File>>>,
     pub agent: Arc<Mutex<Agent>>,
     pub llm: Mutex<LlmConfig>,
     pub models: Mutex<Option<Vec<ModelInfo>>>,
@@ -68,6 +69,7 @@ pub fn run() {
         .manage(AppState {
             session: Arc::new(Mutex::new(None)),
             debug: Arc::new(Mutex::new(None)),
+            debug_stdin: Arc::new(Mutex::new(None)),
             agent: Arc::new(Mutex::new(Agent::new())),
             llm: Mutex::new(LlmConfig::default()),
             models: Mutex::new(None),
@@ -102,6 +104,7 @@ pub fn run() {
             commands::debug_start,
             commands::debug_command,
             commands::debug_stop,
+            commands::debug_stdin,
             commands::debug_registers,
             commands::debug_disassemble,
             commands::debug_breakpoints,
